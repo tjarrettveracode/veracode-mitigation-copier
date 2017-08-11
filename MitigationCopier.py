@@ -2,6 +2,7 @@ import requests
 import sys
 import argparse
 from lxml import etree
+import logging
 
 
 def results_api(build_id, api_user, api_password):
@@ -42,7 +43,19 @@ def main():
     parser.add_argument('-t', '--tobuild', required=True, help='Build ID to copy to')
     parser.add_argument('-u', '--username', required=True, help='Veracode API username')
     parser.add_argument('-p', '--password', required=True, help='Veracode API password')
+    parser.add_argument('-v', '--verbose', required=False, action='store_true', help='Verbose (Debug) logging')
     args = parser.parse_args()
+
+    # SET LOGGING
+    if args.verbose:
+        log_level = logging.DEBUG
+    else:
+        log_level = logging.INFO
+
+    logging.basicConfig(filename='veracode_dynamic_scan_scheduler.log',
+                        format='%(asctime)s - %(levelname)s - %(funcName)s - %(message)s',
+                        datefmt='%m/%d/%Y %I:%M:%S%p',
+                        level=log_level)
 
     # SET VARIABLES FOR FROM AND TO APPS
     results_from = results_api(args.frombuild, args.username, args.password)
@@ -98,6 +111,8 @@ def main():
                 proposal_comment = '[COPIED FROM BUILD ' + args.frombuild + ']' + mitigation_action.attrib['comment']
                 update_mitigation_info(args.tobuild, to_id, proposal_action, proposal_comment, args.username,
                                        args.password)
+                logging.info('Updated mitigation info for Flaw ID ' + str(to_id) + ' in Build ID ' + args.tobuild +
+                             ' based on Flaw ID ' + str(from_id) + ' in Build ID ' + str(args.frombuild))
 
 
 if __name__ == '__main__':
