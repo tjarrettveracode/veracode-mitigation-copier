@@ -62,7 +62,7 @@ def main():
     for flaw in results_from:
         if flaw.attrib['mitigation_status'] == 'accepted':
             counter +=1
-    print '[*] Found ' + str(counter) + ' flaws that match between builds and have approved mitigations.'
+    print '[*] Found  ' + str(counter) + ' flaws that match between builds and have approved mitigations.'
 
     # GET DATA FOR BUILD COPYING FROM
     iteration = -1
