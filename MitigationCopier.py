@@ -4,38 +4,28 @@ import argparse
 from lxml import etree
 import logging
 
+from helpers import api
 
 def results_api(build_id, api_user, api_password):
-    payload = {'build_id': build_id}
-    r = requests.get('https://analysiscenter.veracode.com/api/5.0/detailedreport.do', params=payload,
-                     auth=(api_user, api_password))
-    if r.status_code != 200 or '<error>' in r.content:
+
+    veracode_api = api.VeracodeAPI()
+    
+    r = veracode_api.get_detailed_report(build_id)
+
+    if '<error>' in r.decode("utf-8"):
         logging.info('Error downloading results for Build ID ' + build_id)
         sys.exit('[*] Error downloading results for Build ID ' + build_id)
     logging.info('Downloaded results for Build ID ' + build_id)
-    print '[*] Downloaded results for Build ID ' + build_id
-    return r.content
+    print ('[*] Downloaded results for Build ID ' + build_id)
+    return r
 
 
 def update_mitigation_info(build_id, flaw_id_list, action, comment, results_from_app_id, api_user, api_password):
-    if action == 'Mitigate by Design':
-        action = 'appdesign'
-    elif action == 'Mitigate by Network Environment':
-        action = 'netenv'
-    elif action == 'Mitigate by OS Environment':
-        action = 'osenv'
-    elif action == 'Approve Mitigation':
-        action = 'accepted'
-    elif action == 'Reject Mitigation':
-        action = 'rejected'
-    elif action == 'Potential False Positive':
-        action = 'fp'
-    else:
-        action = 'comment'
-    payload = {'build_id': build_id, 'flaw_id_list': flaw_id_list, 'action': action, 'comment': comment}
-    r = requests.post('https://analysiscenter.veracode.com/api/updatemitigationinfo.do', params=payload,
-                      auth=(api_user, api_password))
-    if r.status_code != 200 or '<error>' in r.content:
+
+    veracode_api = api.VeracodeAPI()
+
+    r = veracode_api.set_mitigation_info(build_id,flaw_id_list,action,comment,results_from_app_id)
+    if '<error>' in r.decode("UTF-8"):
         logging.info('Error updating mitigation_info for ' + flaw_id_list + ' in Build ID ' + build_id)
         sys.exit('[*] Error updating mitigation_info for ' + flaw_id_list + ' in Build ID ' + build_id)
     logging.info(
@@ -50,8 +40,8 @@ def main():
                     'it copies all mitigation information.')
     parser.add_argument('-f', '--frombuild', required=True, help='Build ID to copy from')
     parser.add_argument('-t', '--tobuild', required=True, help='Build ID to copy to')
-    parser.add_argument('-u', '--username', required=True, help='Veracode API username')
-    parser.add_argument('-p', '--password', required=True, help='Veracode API password')
+    parser.add_argument('-u', '--vid', required=True, help='Veracode API ID')
+    parser.add_argument('-p', '--vkey', required=True, help='Veracode API key')
     args = parser.parse_args()
 
     logging.basicConfig(filename='MitigationCopier.log',
@@ -60,7 +50,7 @@ def main():
                         level=logging.INFO)
 
     # SET VARIABLES FOR FROM AND TO APPS
-    results_from = results_api(args.frombuild, args.username, args.password)
+    results_from = results_api(args.frombuild, args.vid, args.vkey)
     results_from_root = etree.fromstring(results_from)
     results_from_static_flaws = results_from_root.findall('{*}severity/{*}category/{*}cwe/{*}staticflaws/{*}flaw')
     results_from_flawid = [None] * len(results_from_static_flaws)
@@ -68,7 +58,7 @@ def main():
     results_from_app_id = 'App ID ' + results_from_root.attrib['app_id'] + ' (' + results_from_root.attrib[
         'app_name'] + ')'
 
-    results_to = results_api(args.tobuild, args.username, args.password)
+    results_to = results_api(args.tobuild, args.vid, args.vkey)
     results_to_root = etree.fromstring(results_to)
     results_to_static_flaws = results_to_root.findall('{*}severity/{*}category/{*}cwe/{*}staticflaws/{*}flaw')
     results_to_flawid = [None] * len(results_to_static_flaws)
@@ -119,14 +109,14 @@ def main():
                         proposal_comment = '[COPIED FROM BUILD ' + args.frombuild + ' of App ID ' + \
                                            results_from_app_id + '] ' + mitigation_action.attrib['description']
                         update_mitigation_info(args.tobuild, to_id, proposal_action, proposal_comment,
-                                               results_from_app_id, args.username,
-                                               args.password)
+                                               results_from_app_id, args.vid,
+                                               args.vkey)
                     counter += 1
                 else:
                     logging.info('Flaw ID ' + str(to_id) + ' in ' + results_to_app_id + ' Build ID ' +
                                  args.tobuild + ' already has an accepted mitigation; skipped.')
 
-    print '[*] Updated ' + str(counter) + ' flaws in ' + results_to_app_id + '. See log file for details.'
+    print('[*] Updated ' + str(counter) + ' flaws in ' + results_to_app_id + '. See log file for details.')
 
 
 if __name__ == '__main__':
