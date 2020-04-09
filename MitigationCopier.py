@@ -40,8 +40,8 @@ def main():
                     'it copies all mitigation information.')
     parser.add_argument('-f', '--frombuild', required=True, help='Build ID to copy from')
     parser.add_argument('-t', '--tobuild', required=True, help='Build ID to copy to')
-    parser.add_argument('-u', '--vid', required=True, help='Veracode API ID')
-    parser.add_argument('-p', '--vkey', required=True, help='Veracode API key')
+    parser.add_argument('-v', '--vid', required=True, help='Veracode API ID')
+    parser.add_argument('-k', '--vkey', required=True, help='Veracode API key')
     args = parser.parse_args()
 
     logging.basicConfig(filename='MitigationCopier.log',
