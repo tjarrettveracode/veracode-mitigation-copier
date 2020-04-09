@@ -32,14 +32,8 @@ class VeracodeAPI:
         try:
             session = requests.Session()
             session.mount(self.baseurl, HTTPAdapter(max_retries=3))
-            request = requests.Request(method, url, params=params)
+            request = requests.Request(method, url, params=params, auth=RequestsAuthPluginVeracodeHMAC())
             prepared_request = request.prepare()
-            try:
-                prepared_request.headers["Authorization"] = generate_veracode_hmac_header(urlparse(url).hostname,
-                                                                                          prepared_request.path_url,
-                                                                                          method)
-            except VeracodeAPISigningException:
-                raise VeracodeAPIError("Could not generate API HMAC header")
             r = session.send(prepared_request, proxies=self.proxies)
             if 200 >= r.status_code <= 299:
                 if r.content is None:
