@@ -15,7 +15,8 @@ import logging
 from requests.adapters import HTTPAdapter
 
 from .exceptions import VeracodeAPIError
-from .api_hmac import generate_veracode_hmac_header, VeracodeHMACError
+from veracode_api_signing.exceptions import VeracodeAPISigningException
+from veracode_api_signing.plugin_requests import RequestsAuthPluginVeracodeHMAC
 
 
 class VeracodeAPI:
@@ -37,7 +38,7 @@ class VeracodeAPI:
                 prepared_request.headers["Authorization"] = generate_veracode_hmac_header(urlparse(url).hostname,
                                                                                           prepared_request.path_url,
                                                                                           method)
-            except VeracodeHMACError:
+            except VeracodeAPISigningException:
                 raise VeracodeAPIError("Could not generate API HMAC header")
             r = session.send(prepared_request, proxies=self.proxies)
             if 200 >= r.status_code <= 299:
