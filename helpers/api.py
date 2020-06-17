@@ -10,6 +10,7 @@
 
 from urllib.parse import urlparse
 
+import time
 import requests
 import logging
 from requests.adapters import HTTPAdapter
@@ -20,12 +21,17 @@ from veracode_api_signing.plugin_requests import RequestsAuthPluginVeracodeHMAC
 
 
 class VeracodeAPI:
+
     def __init__(self, proxies=None):
         self.baseurl = "https://analysiscenter.veracode.com/api"
         requests.Session().mount(self.baseurl, HTTPAdapter(max_retries=3))
         self.proxies = proxies
+        self.base_rest_url = "https://api.veracode.com/"
+        self.base_uri = base_uri = "https://api.veracode.com/appsec/v1/applications"
+        self.find_uri = "https://api.veracode.com/appsec/v2/applications"
 
     def _request(self, url, method, params=None):
+        # base request method for XML APIs, handles what little error handling there is around these APIs
         if method not in ["GET", "POST"]:
             raise VeracodeAPIError("Unsupported HTTP method")
 
@@ -49,6 +55,48 @@ class VeracodeAPI:
         except requests.exceptions.RequestException as e:
             logging.exception("Connection error")
             raise VeracodeAPIError(e)
+
+    def _rest_request(self, url, method, params=None):
+        # base request method for a REST request
+        if method not in ["GET", "POST"]:
+            raise VeracodeAPIError("Unsupported HTTP method")
+
+        try: 
+            session = requests.Session()
+            session.mount(self.base_rest_url, HTTPAdapter(max_retries=3))
+            request = requests.Request(method, self.base_rest_url + url, params=params, auth=RequestsAuthPluginVeracodeHMAC())
+            prepared_request = request.prepare()
+            r = session.send(prepared_request, proxies=self.proxies)
+            if r.status_code == 500 or r.status_code == 504:
+                time.sleep(1)
+                r = requests.Request(method, url, params=params, auth=RequestsAuthPluginVeracodeHMAC())
+
+            if not r.ok:
+                print("Error retrieving data. HTTP status code: {}".format(r.status_code))
+                if r.status_code == 401:
+                    print("Check that your Veracode API account credentials are correct.")
+                raise requests.exceptions.RequestException()
+            else:
+                return r.json()
+        except requests.exceptions.RequestException as e:
+            logging.exception("Connection error")
+            raise VeracodeAPIError(e)
+
+    def _rest_paged_request(self, url, method, element, params=None):
+        all_data = []
+        page = 0
+        more_pages = True
+
+        while more_pages:
+            params['page']=page
+            page_data = self._rest_request(url,method,params)
+            total_pages = page_data.get('page', {}).get('total_pages', 0)
+            data_page = page_data.get('_embedded', {}).get(element, [])
+            all_data += data_page  
+            
+            page += 1
+            more_pages = page < total_pages
+        return all_data
 
     def get_app_list(self):
         """Returns all application profiles."""
@@ -96,7 +144,27 @@ class VeracodeAPI:
             action = 'rejected'
         elif action == 'Potential False Positive':
             action = 'fp'
+        elif action == 'Reported to Library Maintainer':
+            action = 'library'
         else:
             action = 'comment'
         payload = {'build_id': build_id, 'flaw_id_list': flaw_id_list, 'action': action, 'comment': comment}
         return self._request(self.baseurl + "/updatemitigationinfo.do", "POST", params=payload)
+
+    def get_apps(self):
+        return self._rest_paged_request('appsec/v1/applications',"GET","applications")
+
+    def get_app (self,guid):
+        """Gets a single applications in the current customer account using the Veracode Application API."""
+        apps_base_uri = "appsec/v1/applications" + "/{}"
+        uri = apps_base_uri.format(guid)
+
+        return self._rest_request(uri,"GET")
+
+    def get_creds (self):
+        return self._rest_request("api/authn/v2/api_credentials","GET")
+
+    def get_findings(self,app):
+        #Gets a list of static findings for app using the Veracode Findings API
+        request_params = {'include_annot': 'TRUE', 'scan_type': 'STATIC'}
+        return self._rest_paged_request("appsec/v2/applications/"+app+"/findings","GET","findings",request_params)
