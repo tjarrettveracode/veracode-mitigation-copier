@@ -50,8 +50,8 @@ def main():
         description='This script looks at the results set of the FROM APP. For any flaws that have an '
                     'accepted mitigation, it checks the TO APP to see if that flaw exists. If it exists, '
                     'it copies all mitigation information.')
-    parser.add_argument('-f', '--fromapp', help='App GUID to copy from',default='f72bd227-3f21-4521-9542-e52489eb7752')
-    parser.add_argument('-t', '--toapp', help='App GUID to copy to',default='50da1ffe-4123-4436-9455-dfce04f6d302')
+    parser.add_argument('-f', '--fromapp', help='App GUID to copy from',required=True)
+    parser.add_argument('-t', '--toapp', help='App GUID to copy to',required=True)
     args = parser.parse_args()
 
     logging.basicConfig(filename='MitigationCopier.log',
