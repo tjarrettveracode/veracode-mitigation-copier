@@ -6,27 +6,27 @@ import logging
 import json
 import datetime
 
-from helpers import api
+from veracode_api_py import VeracodeAPI as vapi
 
 def findings_api(app_guid):
-    return api.VeracodeAPI().get_findings(app_guid)
+    return vapi().get_findings(app_guid)
 
 def creds_expire_days_warning():
-    creds = api.VeracodeAPI().get_creds()
+    creds = vapi().get_creds()
     exp = datetime.datetime.strptime(creds['expiration_ts'], "%Y-%m-%dT%H:%M:%S.%f%z")
     delta = exp - datetime.datetime.now().astimezone() #we get a datetime with timezone...
     if (delta.days < 7):
         print('These API credentials expire ', creds['expiration_ts'])
 
 def get_application_name(guid):
-    app = api.VeracodeAPI().get_app(guid)
+    app = vapi().get_app(guid)
     return app['profile']['name']
 
 def get_latest_build(guid):
     # a little hacky. Assumes last build is the one to mitigate. Need to check build status
-    app = api.VeracodeAPI().get_app(guid)
+    app = vapi().get_app(guid)
     legacy_id = app['id']
-    build_list = api.VeracodeAPI().get_build_list(legacy_id)
+    build_list = vapi().get_build_list(legacy_id)
     build_list_root = etree.fromstring(build_list)
     latest_build_id = build_list_root[len(build_list_root)-1].get('build_id')
     return latest_build_id
@@ -37,7 +37,7 @@ def format_application_name(guid, app_name):
 
 def update_mitigation_info(build_id, flaw_id_list, action, comment, results_from_app_id):
 
-    r = api.VeracodeAPI().set_mitigation_info(build_id,flaw_id_list,action,comment)
+    r = vapi().set_mitigation_info(build_id,flaw_id_list,action,comment)
     if '<error' in r.decode("UTF-8"):
         logging.info('Error updating mitigation_info for ' + str(flaw_id_list) + ' in Build ID ' + str(build_id))
         sys.exit('[*] Error updating mitigation_info for ' + str(flaw_id_list) + ' in Build ID ' + str(build_id))

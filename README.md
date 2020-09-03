@@ -2,7 +2,7 @@
 
 ## Required Libraries
 
-`veracode-api-signing`, `requests`, and `lxml`, which can be installed using pip:
+`veracode-api-py`, `requests`, and `lxml`, which can be installed using pip:
 
     pip install -r requirements.txt
 
