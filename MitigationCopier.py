@@ -37,9 +37,8 @@ def format_application_name(guid, app_name):
 
 def update_mitigation_info(build_id, flaw_id_list, action, comment, results_from_app_id):
 
-    veracode_api = api.VeracodeAPI()
-    r = veracode_api.set_mitigation_info(build_id,flaw_id_list,action,comment,results_from_app_id)
-    if '<error>' in r.decode("UTF-8"):
+    r = api.VeracodeAPI().set_mitigation_info(build_id,flaw_id_list,action,comment)
+    if '<error' in r.decode("UTF-8"):
         logging.info('Error updating mitigation_info for ' + str(flaw_id_list) + ' in Build ID ' + str(build_id))
         sys.exit('[*] Error updating mitigation_info for ' + str(flaw_id_list) + ' in Build ID ' + str(build_id))
     logging.info(
@@ -51,8 +50,8 @@ def main():
         description='This script looks at the results set of the FROM APP. For any flaws that have an '
                     'accepted mitigation, it checks the TO APP to see if that flaw exists. If it exists, '
                     'it copies all mitigation information.')
-    parser.add_argument('-f', '--fromapp', required=True, help='App GUID to copy from')
-    parser.add_argument('-t', '--toapp', required=True, help='App GUID to copy to')
+    parser.add_argument('-f', '--fromapp', help='App GUID to copy from',default='f72bd227-3f21-4521-9542-e52489eb7752')
+    parser.add_argument('-t', '--toapp', help='App GUID to copy to',default='50da1ffe-4123-4436-9455-dfce04f6d302')
     args = parser.parse_args()
 
     logging.basicConfig(filename='MitigationCopier.log',
@@ -121,7 +120,7 @@ def main():
                 source_flaw = next(flaw for flaw in findings_from if flaw['issue_id'] == from_id)
                 mitigation_list = source_flaw['annotations']
 
-                for mitigation_action in mitigation_list:
+                for mitigation_action in reversed(mitigation_list): #findings API puts most recent action first
                     proposal_action = mitigation_action['action']
                     proposal_comment = '[COPIED FROM APP ' + args.fromapp + '] ' + mitigation_action['comment']
                     update_mitigation_info(results_to_build_id, to_id, proposal_action, proposal_comment, results_to_app_id)
