@@ -31,12 +31,25 @@ def get_latest_build(guid):
     latest_build_id = build_list_root[len(build_list_root)-1].get('build_id')
     return latest_build_id
 
+def format_finding_lookup(flaw):
+    finding_lookup = ''
+
+    if flaw['scan_type'] == 'STATIC':
+        finding_lookup = str(flaw['finding_details']['cwe']['id']) + flaw['scan_type'] + \
+                                        flaw['finding_details']['file_name'] + \
+                                        str(flaw['finding_details']['file_line_number'])
+    elif flaw['scan_type'] == 'DYNAMIC':
+        finding_lookup = str(flaw['findings_details']['cwe']['id']) + flaw['scan_type'] + \
+                                        flaw['finding_details']['url'] + \
+                                        flaw['finding_details'].get('vulnerable_parameter','')
+
+    return finding_lookup
+
 def format_application_name(guid, app_name):
     formatted_name = 'application ' + app_name + ' (guid: ' + guid + ')'
     return formatted_name
 
 def update_mitigation_info(build_id, flaw_id_list, action, comment, results_from_app_id):
-
     r = vapi().set_mitigation_info(build_id,flaw_id_list,action,comment)
     if '<error' in r.decode("UTF-8"):
         logging.info('Error updating mitigation_info for ' + str(flaw_id_list) + ' in Build ID ' + str(build_id))
@@ -86,20 +99,19 @@ def main():
     iteration = -1
     for flaw in findings_from:
         if flaw['finding_status']['resolution_status'] == 'APPROVED':
-            iteration += 1
-            results_from_flawid[iteration] = flaw['issue_id']
-            results_from_unique[iteration] = str(flaw['finding_details']['cwe']['id']) + flaw['scan_type'] + \
-                                             flaw['finding_details']['file_name'] + \
-                                             str(flaw['finding_details']['file_line_number'])
+            finding_lookup = format_finding_lookup(flaw)
+            if finding_lookup != '':
+                iteration += 1
+                results_from_flawid[iteration] = flaw['issue_id']
+                results_from_unique[iteration] = finding_lookup
 
     # CREATE LIST OF UNIQUE VALUES FOR BUILD COPYING TO
     iteration = -1
+
     for flaw in findings_to:
         iteration += 1
-        results_to_unique[iteration] = str(flaw['finding_details']['cwe']['id']) + flaw['scan_type'] + \
-                                             flaw['finding_details']['file_name'] + \
-                                             str(flaw['finding_details']['file_line_number'])
         results_to_flawid[iteration] = flaw['issue_id']
+        results_to_unique[iteration] = format_finding_lookup(flaw)
     
     # CREATE COUNTER VARIABLE
     counter = 0
