@@ -33,7 +33,7 @@ def get_latest_build(guid):
         builds.append(build.get('build_id'))
 
     builds.sort() #we can actually have builds out of order if they are created in a different order than published
-    
+
     return builds[len(builds)-1]
 
 def format_finding_lookup(flaw):
@@ -68,8 +68,8 @@ def main():
         description='This script looks at the results set of the FROM APP. For any flaws that have an '
                     'accepted mitigation, it checks the TO APP to see if that flaw exists. If it exists, '
                     'it copies all mitigation information.')
-    parser.add_argument('-f', '--fromapp', help='App GUID to copy from',default='6c96da18-ae69-44c9-aed9-4910c036b82e')
-    parser.add_argument('-t', '--toapp', help='App GUID to copy to',default='a586a093-9e61-4488-81f8-183a2a6f231b')
+    parser.add_argument('-f', '--fromapp', help='App GUID to copy from',required=True)
+    parser.add_argument('-t', '--toapp', help='App GUID to copy to',required=True)
     args = parser.parse_args()
 
     logging.basicConfig(filename='MitigationCopier.log',
