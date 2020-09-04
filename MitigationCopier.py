@@ -28,8 +28,13 @@ def get_latest_build(guid):
     legacy_id = app['id']
     build_list = vapi().get_build_list(legacy_id)
     build_list_root = etree.fromstring(build_list)
-    latest_build_id = build_list_root[len(build_list_root)-1].get('build_id')
-    return latest_build_id
+    builds = []
+    for build in build_list_root:
+        builds.append(build.get('build_id'))
+
+    builds.sort() #we can actually have builds out of order if they are created in a different order than published
+    
+    return builds[len(builds)-1]
 
 def format_finding_lookup(flaw):
     finding_lookup = ''
@@ -40,7 +45,7 @@ def format_finding_lookup(flaw):
                                         str(flaw['finding_details']['file_line_number'])
     elif flaw['scan_type'] == 'DYNAMIC':
         finding_lookup = str(flaw['findings_details']['cwe']['id']) + flaw['scan_type'] + \
-                                        flaw['finding_details']['url'] + \
+                                        flaw['finding_details']['path'] + \
                                         flaw['finding_details'].get('vulnerable_parameter','')
 
     return finding_lookup
@@ -49,22 +54,22 @@ def format_application_name(guid, app_name):
     formatted_name = 'application ' + app_name + ' (guid: ' + guid + ')'
     return formatted_name
 
-def update_mitigation_info(build_id, flaw_id_list, action, comment, results_from_app_id):
+def update_mitigation_info(build_id, flaw_id_list, action, comment, results_to_app_id):
     r = vapi().set_mitigation_info(build_id,flaw_id_list,action,comment)
     if '<error' in r.decode("UTF-8"):
-        logging.info('Error updating mitigation_info for ' + str(flaw_id_list) + ' in Build ID ' + str(build_id))
-        sys.exit('[*] Error updating mitigation_info for ' + str(flaw_id_list) + ' in Build ID ' + str(build_id))
+        logging.info('Error updating mitigation_info for {} in Build ID {}: {}'.format(str(flaw_id_list),str(build_id),r.decode('UTF-8')))
+        sys.exit('[*] Error updating mitigation_info for {} in Build ID {}'.format(str(flaw_id_list),str(build_id)) )
     logging.info(
-        'Updated mitigation information to ' + action + ' for Flaw ID ' + str(flaw_id_list) + ' in ' +
-        results_from_app_id + ' in Build ID ' + str(build_id))
+        'Updated mitigation information to {} for Flaw ID {} in {} in Build ID {}'.format(action,\
+            str(flaw_id_list), results_to_app_id, build_id))
 
 def main():
     parser = argparse.ArgumentParser(
         description='This script looks at the results set of the FROM APP. For any flaws that have an '
                     'accepted mitigation, it checks the TO APP to see if that flaw exists. If it exists, '
                     'it copies all mitigation information.')
-    parser.add_argument('-f', '--fromapp', help='App GUID to copy from',required=True)
-    parser.add_argument('-t', '--toapp', help='App GUID to copy to',required=True)
+    parser.add_argument('-f', '--fromapp', help='App GUID to copy from',default='6c96da18-ae69-44c9-aed9-4910c036b82e')
+    parser.add_argument('-t', '--toapp', help='App GUID to copy to',default='a586a093-9e61-4488-81f8-183a2a6f231b')
     args = parser.parse_args()
 
     logging.basicConfig(filename='MitigationCopier.log',
