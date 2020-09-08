@@ -9,7 +9,7 @@ import datetime
 from veracode_api_py import VeracodeAPI as vapi
 
 def findings_api(app_guid):
-    return vapi().get_findings(app_guid)
+    return vapi().get_findings(app_guid,scantype='ALL',annot='TRUE')
 
 def creds_expire_days_warning():
     creds = vapi().get_creds()
@@ -23,7 +23,7 @@ def get_application_name(guid):
     return app['profile']['name']
 
 def get_latest_build(guid):
-    # a little hacky. Assumes last build is the one to mitigate. Need to check build status
+    # Assumes last build is the one to mitigate. Need to check build status
     app = vapi().get_app(guid)
     legacy_id = app['id']
     build_list = vapi().get_build_list(legacy_id)
@@ -32,7 +32,7 @@ def get_latest_build(guid):
     for build in build_list_root:
         builds.append(build.get('build_id'))
 
-    builds.sort() #we can actually have builds out of order if they are created in a different order than published
+    #builds.sort() #we can actually have builds out of order if they are created in a different order than published
 
     return builds[len(builds)-1]
 
@@ -44,14 +44,15 @@ def format_finding_lookup(flaw):
                                         flaw['finding_details']['file_name'] + \
                                         str(flaw['finding_details']['file_line_number'])
     elif flaw['scan_type'] == 'DYNAMIC':
-        finding_lookup = str(flaw['findings_details']['cwe']['id']) + flaw['scan_type'] + \
-                                        flaw['finding_details']['path'] + \
+        finding_lookup = str(flaw['finding_details']['cwe']['id']) + flaw['scan_type'] + \
+                                        flaw['finding_details'].get('path','') + \
                                         flaw['finding_details'].get('vulnerable_parameter','')
+        logging.debug('Dynamic finding: {}'.format(finding_lookup))
 
     return finding_lookup
 
 def format_application_name(guid, app_name):
-    formatted_name = 'application ' + app_name + ' (guid: ' + guid + ')'
+    formatted_name = 'application {} (guid: {})'.format(app_name,guid)
     return formatted_name
 
 def update_mitigation_info(build_id, flaw_id_list, action, comment, results_to_app_id):
@@ -84,18 +85,18 @@ def main():
     results_from_app_id = args.fromapp
     results_from_app_name = get_application_name(results_from_app_id)
     formatted_from = format_application_name(results_from_app_id,results_from_app_name)
-    print('Getting findings for', formatted_from)
+    print('Getting findings for {}'.format(formatted_from))
     findings_from = findings_api(args.fromapp)
-    print('Found', len(findings_from) ,'findings in "from" ' + formatted_from)
+    print('Found {} findings in "from" {}'.format(len(findings_from),formatted_from))
     results_from_flawid = [None] * len(findings_from)
     results_from_unique = [None] * len(findings_from)
 
     results_to_app_id = args.toapp
     results_to_app_name = get_application_name(args.toapp)
     formatted_to = format_application_name(results_to_app_id,results_to_app_name)
-    print('Getting findings for', formatted_to)
+    print('Getting findings for {}'.format(formatted_to))
     findings_to = findings_api(args.toapp)
-    print('Found', len(findings_to) ,'findings in "to" ' + formatted_to)
+    print('Found {} findings in "to" {}'.format(len(findings_to),formatted_to))
     results_to_flawid = [None] * len(findings_to)
     results_to_unique = [None] * len(findings_to)
     results_to_build_id = get_latest_build(args.toapp)
@@ -139,14 +140,15 @@ def main():
 
                 for mitigation_action in reversed(mitigation_list): #findings API puts most recent action first
                     proposal_action = mitigation_action['action']
-                    proposal_comment = '[COPIED FROM APP ' + args.fromapp + '] ' + mitigation_action['comment']
+                    proposal_comment = '[COPIED FROM APP {}}] {}'.format(args.fromapp, mitigation_action['comment'])
                     update_mitigation_info(results_to_build_id, to_id, proposal_action, proposal_comment, results_to_app_id)
                 counter += 1
             else:
-                logging.info('Flaw ID ' + str(to_id) + ' in ' + results_to_app_id + ' already has an accepted mitigation; skipped.')
+                logging.info('Flaw ID {} in {} already has an accepted mitigation; skipped.'.\
+                    format(str(to_id),results_to_app_id))
 
-    print('[*] Updated ' + str(counter) + ' flaws in application ' + results_to_app_name + ' (guid ' + results_to_app_id + \
-         '). See log file for details.')
+    print('[*] Updated {} flaws in application {} (guid {}). See log file for details.'.\
+                format(str(counter),results_to_app_name,results_to_app_id))
 
 if __name__ == '__main__':
     main()
