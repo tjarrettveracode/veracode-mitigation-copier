@@ -8,7 +8,12 @@
 
 ## Description
 
-Copies mitigations from one Veracode profile to another if it's the same flaw based on the following flaw attributes: `issueid`, `cweid`, `type`, `sourcefile`, and `line`. The script will copy all proposed and accepted mitigations for the flaw. The script will skip a flaw in the `copy_to` build if it already has an accepted mitigation.
+Copies mitigations from one Veracode profile to another if it's the same flaw based on the following flaw attributes:
+
+- **Static**: `issueid`, `cweid`, `type`, `sourcefile`, and `line`
+- **Dynamic**: `issueid`, `cweid`, `path` and `vulnerable_parameter`
+
+The script will copy all proposed and accepted mitigations for the flaw. The script will skip a flaw in the `copy_to` build if it already has an accepted mitigation.
 
 API credentials are supplied using the [standard Veracode methods](https://help.veracode.com/go/c_configure_api_cred_file) (either via a `.veracode/credentials` file or via environment variables).
 
