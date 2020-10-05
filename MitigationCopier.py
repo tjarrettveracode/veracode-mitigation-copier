@@ -6,6 +6,7 @@ import logging
 import json
 import datetime
 
+import anticrlf
 from veracode_api_py import VeracodeAPI as vapi
 
 def findings_api(app_guid):
@@ -73,8 +74,10 @@ def main():
     parser.add_argument('-t', '--toapp', help='App GUID to copy to',required=True)
     args = parser.parse_args()
 
-    logging.basicConfig(filename='MitigationCopier.log',
-                        format='%(asctime)s - %(levelname)s - %(funcName)s - %(message)s',
+    handler = logging.FileHandler(filename='MitigationCopier.log')
+    handler.setFormatter(anticrlf.LogFormatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+
+    logging.basicConfig(handlers={handler},
                         datefmt='%m/%d/%Y %I:%M:%S%p',
                         level=logging.INFO)
 
