@@ -1,0 +1,20 @@
+{
+  "_links": {
+    "root": {
+      "href": "/"
+    },
+    "self": {
+      "href": "/scans/03131819-64af-41ae-8e15-e9ee642890fc/findings"
+    },
+    "help": {
+      "href": "https://help.veracode.com/reader/LMv_dtSHyb7iIxAQznC~9w/56JX_MvP4edL8JB_h8ywGA"
+    }
+  },
+  "scan_id": "03131819-64af-41ae-8e15-e9ee642890fc",
+  "scan_status": "SUCCESS",
+  "message": "Scan successful. Results size: 5516 bytes",
+  "findings": [],
+  "pipeline_scan": "20.10.0-0",
+  "scan_app_id": "955387",
+  "dev_stage": "DEVELOPMENT"
+}

@@ -107,12 +107,14 @@ def main():
      # GET DATA FOR BUILD COPYING FROM
     iteration = -1
     for flaw in findings_from:
-        if flaw['finding_status']['resolution_status'] == 'APPROVED':
-            finding_lookup = format_finding_lookup(flaw)
-            if finding_lookup != '':
-                iteration += 1
-                results_from_flawid[iteration] = flaw['issue_id']
-                results_from_unique[iteration] = finding_lookup
+        if flaw['finding_status']['resolution_status'] != 'APPROVED':
+            continue
+
+        finding_lookup = format_finding_lookup(flaw)
+        if finding_lookup != '':
+            iteration += 1
+            results_from_flawid[iteration] = flaw['issue_id']
+            results_from_unique[iteration] = finding_lookup
 
     # CREATE LIST OF UNIQUE VALUES FOR BUILD COPYING TO
     iteration = -1
