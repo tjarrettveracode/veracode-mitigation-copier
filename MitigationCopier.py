@@ -23,7 +23,7 @@ def get_application_name(guid):
     app = vapi().get_app(guid)
     return app['profile']['name']
 
-def get_latest_build(guid):
+""" def get_latest_build(guid):
     # Assumes last build is the one to mitigate. Need to check build status
     app = vapi().get_app(guid)
     legacy_id = app['id']
@@ -35,7 +35,7 @@ def get_latest_build(guid):
 
     #builds.sort() #we can actually have builds out of order if they are created in a different order than published
 
-    return builds[len(builds)-1]
+    return builds[len(builds)-1] """
 
 def format_finding_lookup(flaw):
     finding_lookup = ''
@@ -64,6 +64,11 @@ def update_mitigation_info(build_id, flaw_id_list, action, comment, results_to_a
     logging.info(
         'Updated mitigation information to {} for Flaw ID {} in {} in Build ID {}'.format(action,\
             str(flaw_id_list), results_to_app_id, build_id))
+
+def update_mitigation_info_rest(to_app_guid,flaw_id_list,action,comment):
+    r = vapi().add_annotation(to_app_guid,flaw_id_list,action,comment)
+    logging.info(
+        'Updated mitigation information to {} for Flaw ID {} in {}'.format(action, str(flaw_id_list), to_app_guid))
 
 def main():
     parser = argparse.ArgumentParser(
@@ -102,7 +107,7 @@ def main():
     print('Found {} findings in "to" {}'.format(len(findings_to),formatted_to))
     results_to_flawid = [None] * len(findings_to)
     results_to_unique = [None] * len(findings_to)
-    results_to_build_id = get_latest_build(args.toapp)
+    #results_to_build_id = get_latest_build(args.toapp)
 
      # GET DATA FOR BUILD COPYING FROM
     iteration = -1
@@ -146,7 +151,7 @@ def main():
                 for mitigation_action in reversed(mitigation_list): #findings API puts most recent action first
                     proposal_action = mitigation_action['action']
                     proposal_comment = '[COPIED FROM APP {}}] {}'.format(args.fromapp, mitigation_action['comment'])
-                    update_mitigation_info(results_to_build_id, to_id, proposal_action, proposal_comment, results_to_app_id)
+                    update_mitigation_info_rest(results_to_app_id, to_id, proposal_action, proposal_comment)
                 counter += 1
             else:
                 logging.info('Flaw ID {} in {} already has an accepted mitigation; skipped.'.\
