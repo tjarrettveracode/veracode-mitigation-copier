@@ -9,6 +9,15 @@ import datetime
 import anticrlf
 from veracode_api_py import VeracodeAPI as vapi
 
+log = logging.getLogger(__name__)
+
+def setup_logger():
+    handler = logging.FileHandler('MitigationCopier.log', encoding='utf8')
+    handler.setFormatter(anticrlf.LogFormatter('%(asctime)s - %(levelname)s - %(funcName)s - %(message)s'))
+    logger = logging.getLogger(__name__)
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG)
+
 def findings_api(app_guid):
     return vapi().get_findings(app_guid,scantype='ALL',annot='TRUE')
 
@@ -23,20 +32,6 @@ def get_application_name(guid):
     app = vapi().get_app(guid)
     return app['profile']['name']
 
-""" def get_latest_build(guid):
-    # Assumes last build is the one to mitigate. Need to check build status
-    app = vapi().get_app(guid)
-    legacy_id = app['id']
-    build_list = vapi().get_build_list(legacy_id)
-    build_list_root = etree.fromstring(build_list)
-    builds = []
-    for build in build_list_root:
-        builds.append(build.get('build_id'))
-
-    #builds.sort() #we can actually have builds out of order if they are created in a different order than published
-
-    return builds[len(builds)-1] """
-
 def format_finding_lookup(flaw):
     finding_lookup = ''
 
@@ -48,7 +43,7 @@ def format_finding_lookup(flaw):
         finding_lookup = str(flaw['finding_details']['cwe']['id']) + flaw['scan_type'] + \
                                         flaw['finding_details'].get('path','') + \
                                         flaw['finding_details'].get('vulnerable_parameter','')
-        logging.debug('Dynamic finding: {}'.format(finding_lookup))
+        log.debug('Dynamic finding: {}'.format(finding_lookup))
 
     return finding_lookup
 
@@ -56,35 +51,29 @@ def format_application_name(guid, app_name):
     formatted_name = 'application {} (guid: {})'.format(app_name,guid)
     return formatted_name
 
-def update_mitigation_info(build_id, flaw_id_list, action, comment, results_to_app_id):
-    r = vapi().set_mitigation_info(build_id,flaw_id_list,action,comment)
-    if '<error' in r.decode("UTF-8"):
-        logging.info('Error updating mitigation_info for {} in Build ID {}: {}'.format(str(flaw_id_list),str(build_id),r.decode('UTF-8')))
-        sys.exit('[*] Error updating mitigation_info for {} in Build ID {}'.format(str(flaw_id_list),str(build_id)) )
-    logging.info(
-        'Updated mitigation information to {} for Flaw ID {} in {} in Build ID {}'.format(action,\
-            str(flaw_id_list), results_to_app_id, build_id))
-
-def update_mitigation_info_rest(to_app_guid,flaw_id_list,action,comment):
-    r = vapi().add_annotation(to_app_guid,flaw_id_list,action,comment)
-    logging.info(
+def update_mitigation_info_rest(to_app_guid,flaw_id,action,comment):
+    if action == 'CONFORMS' or action == 'DEVIATES':
+        log.warning('Cannot copy {} mitigation for Flaw ID {} in {}'.format(action,flaw_id,to_app_guid))
+        return
+    flaw_id_list = [flaw_id]
+    vapi().add_annotation(to_app_guid,flaw_id_list,comment,action)
+    log.info(
         'Updated mitigation information to {} for Flaw ID {} in {}'.format(action, str(flaw_id_list), to_app_guid))
+
+def logprint(log_msg):
+    log.info(log_msg)
+    print(log_msg)
 
 def main():
     parser = argparse.ArgumentParser(
         description='This script looks at the results set of the FROM APP. For any flaws that have an '
                     'accepted mitigation, it checks the TO APP to see if that flaw exists. If it exists, '
                     'it copies all mitigation information.')
-    parser.add_argument('-f', '--fromapp', help='App GUID to copy from',required=True)
-    parser.add_argument('-t', '--toapp', help='App GUID to copy to',required=True)
+    parser.add_argument('-f', '--fromapp', help='App GUID to copy from',default="0254254d-274d-4357-8991-c0b15070f976")
+    parser.add_argument('-t', '--toapp', help='App GUID to copy to',default="4c564faf-4705-4d36-abd9-9aaa30bdb4c0")
     args = parser.parse_args()
 
-    handler = logging.FileHandler(filename='MitigationCopier.log')
-    handler.setFormatter(anticrlf.LogFormatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-
-    logging.basicConfig(handlers={handler},
-                        datefmt='%m/%d/%Y %I:%M:%S%p',
-                        level=logging.INFO)
+    setup_logger()
 
     # CHECK FOR CREDENTIALS EXPIRATION
     creds_expire_days_warning()
@@ -93,21 +82,20 @@ def main():
     results_from_app_id = args.fromapp
     results_from_app_name = get_application_name(results_from_app_id)
     formatted_from = format_application_name(results_from_app_id,results_from_app_name)
-    print('Getting findings for {}'.format(formatted_from))
+    logprint('Getting findings for {}'.format(formatted_from))
     findings_from = findings_api(args.fromapp)
-    print('Found {} findings in "from" {}'.format(len(findings_from),formatted_from))
+    logprint('Found {} findings in "from" {}'.format(len(findings_from),formatted_from))
     results_from_flawid = [None] * len(findings_from)
     results_from_unique = [None] * len(findings_from)
 
     results_to_app_id = args.toapp
     results_to_app_name = get_application_name(args.toapp)
     formatted_to = format_application_name(results_to_app_id,results_to_app_name)
-    print('Getting findings for {}'.format(formatted_to))
+    logprint('Getting findings for {}'.format(formatted_to))
     findings_to = findings_api(args.toapp)
-    print('Found {} findings in "to" {}'.format(len(findings_to),formatted_to))
+    logprint('Found {} findings in "to" {}'.format(len(findings_to),formatted_to))
     results_to_flawid = [None] * len(findings_to)
     results_to_unique = [None] * len(findings_to)
-    #results_to_build_id = get_latest_build(args.toapp)
 
      # GET DATA FOR BUILD COPYING FROM
     iteration = -1
@@ -143,19 +131,19 @@ def main():
             # CHECK IF IT'S ALREADY MITIGATED IN TO
             flaw_copy_to_list = next(flaw for flaw in findings_to if flaw['issue_id'] == to_id)
             # CHECK IF COPY TO IS ALREADY ACCEPTED
-            if flaw_copy_to_list['finding_status']['resolution_status'] != 'APPROVED':
-
-                source_flaw = next(flaw for flaw in findings_from if flaw['issue_id'] == from_id)
-                mitigation_list = source_flaw['annotations']
-
-                for mitigation_action in reversed(mitigation_list): #findings API puts most recent action first
-                    proposal_action = mitigation_action['action']
-                    proposal_comment = '[COPIED FROM APP {}}] {}'.format(args.fromapp, mitigation_action['comment'])
-                    update_mitigation_info_rest(results_to_app_id, to_id, proposal_action, proposal_comment)
-                counter += 1
-            else:
-                logging.info('Flaw ID {} in {} already has an accepted mitigation; skipped.'.\
+            if flaw_copy_to_list['finding_status']['resolution_status'] == 'APPROVED':
+                logprint('Flaw ID {} in {} already has an accepted mitigation; skipped.'.\
                     format(str(to_id),results_to_app_id))
+                continue
+
+            source_flaw = next(flaw for flaw in findings_from if flaw['issue_id'] == from_id)
+            mitigation_list = source_flaw['annotations']
+
+            for mitigation_action in reversed(mitigation_list): #findings API puts most recent action first
+                proposal_action = mitigation_action['action']
+                proposal_comment = '[COPIED FROM APP {}] {}'.format(args.fromapp, mitigation_action['comment'])
+                update_mitigation_info_rest(results_to_app_id, to_id, proposal_action, proposal_comment)
+            counter += 1
 
     print('[*] Updated {} flaws in application {} (guid {}). See log file for details.'.\
                 format(str(counter),results_to_app_name,results_to_app_id))

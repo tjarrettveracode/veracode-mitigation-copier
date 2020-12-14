@@ -1,4 +1,3 @@
-veracode-api-py>=0.7
-lxml
+veracode-api-py>=0.9.5
 requests<3.0,>=2.24.0
 logging-formatter-anticrlf
