@@ -2,7 +2,7 @@
 
 ## Required Libraries
 
-`veracode-api-py` and `requests`, which can be installed using pip:
+`veracode-api-py`, `requests`, and `logging-formatter-anticrlf`, which can be installed using pip:
 
     pip install -r requirements.txt
 
@@ -10,8 +10,8 @@
 
 Copies mitigations from one Veracode profile to another if it's the same flaw based on the following flaw attributes:
 
-- **Static**: `issueid`, `cweid`, `type`, `sourcefile`, and `line`
-- **Dynamic**: `issueid`, `cweid`, `path` and `vulnerable_parameter`
+- **Static**: `cweid`, `type`, `sourcefile`, and `line`
+- **Dynamic**: `cweid`, `path` and `vulnerable_parameter`
 
 The script will copy all proposed and accepted mitigations for the flaw. The script will skip a flaw in the `copy_to` build if it already has an accepted mitigation.
 
