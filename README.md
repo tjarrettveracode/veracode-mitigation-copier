@@ -2,7 +2,7 @@
 
 ## Required Libraries
 
-`veracode-api-py`, `requests`, and `logging-formatter-anticrlf`, which can be installed using pip:
+`veracode-api-py`, `requests`, and `logging-formatter-anticrlf`, which can be installed using `pip` (or `pip3`):
 
     pip install -r requirements.txt
 
@@ -19,8 +19,12 @@ API credentials are supplied using the [standard Veracode methods](https://help.
 
 ## Parameters
 
-    1. -f, --fromapp  # Application GUID that you want to copy mitigations from.
-    2. -t, --toapp  # Application GUID that you want to copy mitigations to.
+1. `-f`, `--fromapp` - Application GUID that you want to copy mitigations from.
+1. `-fs`, `--fromsandbox` (optional) - Sandbox GUID that you want to copy mitigations from.
+1. `-t`, `--toapp` - Application GUID that you want to copy mitigations to.
+1. `-ts`, `--tosandbox` (optional) - Sandbox GUID that you want to copy mitigations to.
+1. `-p`, `--prompt` - Specify to prompt for the applications to copy from and to.
+1. `-d`, `--dry_run` (optional) - Specify to log potential copied mitigations rather than actually mitigating the findings.
 
 ## Logging
 
