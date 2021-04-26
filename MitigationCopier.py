@@ -93,8 +93,10 @@ def create_match_format_policy(app_guid, sandbox_guid, policy_findings, finding_
                 'id': pf['issue_id'],
                 'resolution': pf['finding_status']['resolution'],
                 'cwe': pf['finding_details']['cwe']['id'],
-                'source_file': pf['finding_details']['file_path'],
-                'line': pf['finding_details']['file_line_number'],
+                'procedure': pf['finding_details'].get('procedure'),
+                'relative_location': pf['finding_details'].get('relative_location'),
+                'source_file': pf['finding_details'].get('file_path'),
+                'line': pf['finding_details'].get('file_line_number'),
                 'finding': pf} for pf in policy_findings]
         findings.extend(thesefindings)
     elif finding_type == 'DYNAMIC':
@@ -115,9 +117,15 @@ def format_application_name(guid, app_name):
 def get_matched_policy_finding(origin_finding, potential_findings, scan_type='STATIC'):
     match = None
     if scan_type == 'STATIC':
-        match = next((pf for pf in potential_findings if ((origin_finding['cwe'] == int(pf['cwe'])) & 
-            (origin_finding['source_file'].find(pf['source_file']) > -1 ) & 
-            ((origin_finding['line'] - LINE_NUMBER_SLOP) <= pf['line'] <= (origin_finding['line'] + LINE_NUMBER_SLOP)))), None)
+        if origin_finding['source_file'] is not None:
+            match = next((pf for pf in potential_findings if ((origin_finding['cwe'] == int(pf['cwe'])) & 
+                (origin_finding['source_file'].find(pf['source_file']) > -1 ) & 
+                ((origin_finding['line'] - LINE_NUMBER_SLOP) <= pf['line'] <= (origin_finding['line'] + LINE_NUMBER_SLOP)))), None)
+        else:
+            # if we don't have source file info try matching on procedure and relative location
+            match = next((pf for pf in potential_findings if ((origin_finding['cwe'] == int(pf['cwe'])) & 
+                (origin_finding['procedure'].find(pf['procedure']) > -1 ) & 
+                ((origin_finding['relative_location'] - LINE_NUMBER_SLOP) <= pf['relative_location'] <= (origin_finding['relative_location'] + LINE_NUMBER_SLOP)))), None)
     elif scan_type == 'DYNAMIC':
         match = next((pf for pf in potential_findings if ((origin_finding['cwe'] == int(pf['cwe'])) & 
             (origin_finding['path'] == pf['path']) &
@@ -201,9 +209,9 @@ def main():
         description='This script looks at the results set of the FROM APP. For any flaws that have an '
                     'accepted mitigation, it checks the TO APP to see if that flaw exists. If it exists, '
                     'it copies all mitigation information.')
-    parser.add_argument('-f', '--fromapp', help='App GUID to copy from')
+    parser.add_argument('-f', '--fromapp', help='App GUID to copy from',default='b934658e-a71e-4ab9-bc14-7011d2184d2b')
     parser.add_argument('-fs', '--fromsandbox', help='Sandbox GUID to copy from (optional)')
-    parser.add_argument('-t', '--toapp', help='App GUID to copy to')
+    parser.add_argument('-t', '--toapp', help='App GUID to copy to',default='46cd1e54-b14d-4a4b-b0a1-fd003711af07')
     parser.add_argument('-ts', '--tosandbox', help="Sandbox GUID to copy to (optional)")
     parser.add_argument('-p', '--prompt', action='store_true', help='Specify to prompt for the applications to copy from and to.')
     parser.add_argument('-d', '--dry_run', action='store_true', help="Log matched flaws instead of applying mitigations")
