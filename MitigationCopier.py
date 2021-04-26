@@ -209,9 +209,9 @@ def main():
         description='This script looks at the results set of the FROM APP. For any flaws that have an '
                     'accepted mitigation, it checks the TO APP to see if that flaw exists. If it exists, '
                     'it copies all mitigation information.')
-    parser.add_argument('-f', '--fromapp', help='App GUID to copy from',default='b934658e-a71e-4ab9-bc14-7011d2184d2b')
+    parser.add_argument('-f', '--fromapp', help='App GUID to copy from')
     parser.add_argument('-fs', '--fromsandbox', help='Sandbox GUID to copy from (optional)')
-    parser.add_argument('-t', '--toapp', help='App GUID to copy to',default='46cd1e54-b14d-4a4b-b0a1-fd003711af07')
+    parser.add_argument('-t', '--toapp', help='App GUID to copy to')
     parser.add_argument('-ts', '--tosandbox', help="Sandbox GUID to copy to (optional)")
     parser.add_argument('-p', '--prompt', action='store_true', help='Specify to prompt for the applications to copy from and to.')
     parser.add_argument('-d', '--dry_run', action='store_true', help="Log matched flaws instead of applying mitigations")
