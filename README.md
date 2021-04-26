@@ -10,7 +10,8 @@
 
 Copies mitigations from one Veracode profile to another if it's the same flaw based on the following flaw attributes:
 
-- **Static**: `cweid`, `type`, `sourcefile`, and `line`
+- **Static**: `cweid`, `type`, `sourcefile`, and `line` (see Note 1 below)
+- **Static (no debug information)**: `cweid`, `type`, `procedure` and `relative_location`
 - **Dynamic**: `cweid`, `path` and `vulnerable_parameter`
 
 The script will copy all proposed and accepted mitigations for the flaw. The script will skip a flaw in the `copy_to` build if it already has an accepted mitigation.
@@ -29,3 +30,8 @@ API credentials are supplied using the [standard Veracode methods](https://help.
 ## Logging
 
 The script creates a `MitigationCopier.log` file. All actions are logged.
+
+## Notes
+
+1. For static findings, when matching by line number, we automatically look within a range of line numbers around the original finding line number to allow for drift. This is controlled by the constant `LINE_NUMBER_SLOP` declared at the top of the file.
+2. For static findings when source file information is not available, we try to use procedure and relative location. This is less predictable so it is recommended that you perform a dry run when copying mitigations from non-debug code. Unlike when source file information is available, we do not use "sloppy matching" in this case -- we have observed that mitigations in non-debug code are most common when a binary dependency is being reused across teams and thus locations are less likely to change.

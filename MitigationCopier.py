@@ -125,7 +125,7 @@ def get_matched_policy_finding(origin_finding, potential_findings, scan_type='ST
             # if we don't have source file info try matching on procedure and relative location
             match = next((pf for pf in potential_findings if ((origin_finding['cwe'] == int(pf['cwe'])) & 
                 (origin_finding['procedure'].find(pf['procedure']) > -1 ) & 
-                ((origin_finding['relative_location'] - LINE_NUMBER_SLOP) <= pf['relative_location'] <= (origin_finding['relative_location'] + LINE_NUMBER_SLOP)))), None)
+                (origin_finding['relative_location'] == pf['relative_location'] ))), None)
     elif scan_type == 'DYNAMIC':
         match = next((pf for pf in potential_findings if ((origin_finding['cwe'] == int(pf['cwe'])) & 
             (origin_finding['path'] == pf['path']) &
