@@ -170,26 +170,29 @@ def match_for_scan_type(from_app_guid, to_app_guid, dry_run, scan_type='STATIC',
 
     # look for a match for each finding in the TO list and apply mitigations of the matching flaw, if found
     for thisfinding in copy_array_from:
-        to_id = thisfinding['id']
+        from_id = thisfinding['id']
         match = get_matched_policy_finding(thisfinding, copy_array_to, scan_type)
 
         if match == None:
             continue
-        elif match['finding']['finding_status']['resolution_status'] == 'APPROVED':
-            logprint ('Flaw ID {} in {} already has an accepted mitigation; skipped.'.format(to_id,formatted_to))
-        else:
-            mitigation_list = thisfinding['finding']['annotations']
-            logprint ('Applying {} annotations for flaw ID {} in {}...'.format(len(mitigation_list),to_id,formatted_to))
 
-            for mitigation_action in reversed(mitigation_list): #findings API puts most recent action first
-                proposal_action = mitigation_action['action']
-                proposal_comment = '[COPIED FROM APP {}] {}'.format(from_app_guid, mitigation_action['comment'])
-                if dry_run:
-                    log.info('Potential match for app {}, flaw id {}, action {}, comment {}'.format(to_app_guid,
-                                to_id, proposal_action, proposal_comment))
-                else:
-                    update_mitigation_info_rest(to_app_guid, match['id'], proposal_action, proposal_comment, to_sandbox_guid)
-            counter += 1
+        to_id = match.get('id')
+
+        log.info('Source flaw {} in {} has a possible target match in flaw {} in {}.'.format(from_id,formatted_from,to_id,formatted_to))
+
+        if match['finding']['finding_status']['resolution_status'] == 'APPROVED':
+            logprint ('Flaw ID {} in {} already has an accepted mitigation; skipped.'.format(to_id,formatted_to))
+            continue 
+
+        mitigation_list = thisfinding['finding']['annotations']
+        logprint ('Applying {} annotations for flaw ID {} in {}...'.format(len(mitigation_list),to_id,formatted_to))
+
+        for mitigation_action in reversed(mitigation_list): #findings API puts most recent action first
+            proposal_action = mitigation_action['action']
+            proposal_comment = '[COPIED FROM APP {}] {}'.format(from_app_guid, mitigation_action['comment'])
+            if not(dry_run):
+                update_mitigation_info_rest(to_app_guid, match['id'], proposal_action, proposal_comment, to_sandbox_guid)
+        counter += 1
 
     print('[*] Updated {} flaws in {}. See log file for details.'.format(str(counter),formatted_to))
 
@@ -198,9 +201,9 @@ def main():
         description='This script looks at the results set of the FROM APP. For any flaws that have an '
                     'accepted mitigation, it checks the TO APP to see if that flaw exists. If it exists, '
                     'it copies all mitigation information.')
-    parser.add_argument('-f', '--fromapp', help='App GUID to copy from',default='a586a093-9e61-4488-81f8-183a2a6f231b')
+    parser.add_argument('-f', '--fromapp', help='App GUID to copy from')
     parser.add_argument('-fs', '--fromsandbox', help='Sandbox GUID to copy from (optional)')
-    parser.add_argument('-t', '--toapp', help='App GUID to copy to',default='3363fee4-e4fd-4045-b1a5-1808ae24acee')
+    parser.add_argument('-t', '--toapp', help='App GUID to copy to')
     parser.add_argument('-ts', '--tosandbox', help="Sandbox GUID to copy to (optional)")
     parser.add_argument('-p', '--prompt', action='store_true', help='Specify to prompt for the applications to copy from and to.')
     parser.add_argument('-d', '--dry_run', action='store_true', help="Log matched flaws instead of applying mitigations")
