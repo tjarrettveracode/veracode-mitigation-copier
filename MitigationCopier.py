@@ -154,7 +154,13 @@ def match_for_scan_type(from_app_guid, to_app_guid, dry_run, scan_type='STATIC',
     count_from = len(findings_from)
     logprint('Found {} {} findings in "from" {}'.format(count_from,scan_type.lower(),formatted_from))
     if count_from == 0:
-        return 0 # no source findings to copy!    
+        return 0 # no source findings to copy!   
+   
+    findings_from_approved = filter_approved(findings_from)
+
+    if len(findings_from_approved) == 0:
+        logprint('No approved findings in "from" {}. Exiting.'.format(formatted_from))
+        return 0
 
     results_to_app_name = get_application_name(to_app_guid)
     formatted_to = format_application_name(to_app_guid,results_to_app_name)
@@ -167,7 +173,7 @@ def match_for_scan_type(from_app_guid, to_app_guid, dry_run, scan_type='STATIC',
         return 0 # no destination findings to mitigate!
 
     # GET DATA FOR BUILD COPYING FROM
-    findings_from_approved = filter_approved(findings_from)
+
     copy_array_from = create_match_format_policy( app_guid=from_app_guid, sandbox_guid=from_sandbox_guid, policy_findings=findings_from_approved,finding_type=scan_type)
 
     # CREATE LIST OF UNIQUE VALUES FOR BUILD COPYING TO
@@ -199,7 +205,7 @@ def match_for_scan_type(from_app_guid, to_app_guid, dry_run, scan_type='STATIC',
             proposal_action = mitigation_action['action']
             proposal_comment = '[COPIED FROM APP {}] {}'.format(from_app_guid, mitigation_action['comment'])
             if not(dry_run):
-                update_mitigation_info_rest(to_app_guid, match['id'], proposal_action, proposal_comment, to_sandbox_guid)
+                update_mitigation_info_rest(to_app_guid, to_id, proposal_action, proposal_comment, to_sandbox_guid)
         counter += 1
 
     print('[*] Updated {} flaws in {}. See log file for details.'.format(str(counter),formatted_to))
