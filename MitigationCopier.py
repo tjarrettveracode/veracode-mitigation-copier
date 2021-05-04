@@ -146,6 +146,14 @@ def update_mitigation_info_rest(to_app_guid,flaw_id,action,comment,sandbox_guid=
     log.info(
         'Updated mitigation information to {} for Flaw ID {} in {}'.format(action, str(flaw_id_list), to_app_guid))
 
+def set_in_memory_flaw_to_approved(findings_to,to_id):
+    # use this function to update the status of target findings in memory, so that, if it is found
+    # as a match for multiple flaws, we only copy the mitigations once.
+    for finding in findings_to:
+        if all (k in finding for k in ("id", "finding")):
+            if (finding["id"] == to_id):
+                finding['finding']['finding_status']['resolution_status'] = 'APPROVED'
+
 def match_for_scan_type(from_app_guid, to_app_guid, dry_run, scan_type='STATIC',from_sandbox_guid=None, to_sandbox_guid=None):
     results_from_app_name = get_application_name(from_app_guid)
     formatted_from = format_application_name(from_app_guid,results_from_app_name)
@@ -173,7 +181,6 @@ def match_for_scan_type(from_app_guid, to_app_guid, dry_run, scan_type='STATIC',
         return 0 # no destination findings to mitigate!
 
     # GET DATA FOR BUILD COPYING FROM
-
     copy_array_from = create_match_format_policy( app_guid=from_app_guid, sandbox_guid=from_sandbox_guid, policy_findings=findings_from_approved,finding_type=scan_type)
 
     # CREATE LIST OF UNIQUE VALUES FOR BUILD COPYING TO
@@ -206,6 +213,8 @@ def match_for_scan_type(from_app_guid, to_app_guid, dry_run, scan_type='STATIC',
             proposal_comment = '[COPIED FROM APP {}] {}'.format(from_app_guid, mitigation_action['comment'])
             if not(dry_run):
                 update_mitigation_info_rest(to_app_guid, to_id, proposal_action, proposal_comment, to_sandbox_guid)
+
+        set_in_memory_flaw_to_approved(copy_array_to,to_id) # so we don't attempt to mitigate approved finding twice
         counter += 1
 
     print('[*] Updated {} flaws in {}. See log file for details.'.format(str(counter),formatted_to))
@@ -215,9 +224,9 @@ def main():
         description='This script looks at the results set of the FROM APP. For any flaws that have an '
                     'accepted mitigation, it checks the TO APP to see if that flaw exists. If it exists, '
                     'it copies all mitigation information.')
-    parser.add_argument('-f', '--fromapp', help='App GUID to copy from')
+    parser.add_argument('-f', '--fromapp', help='App GUID to copy from',default='b934658e-a71e-4ab9-bc14-7011d2184d2b')
     parser.add_argument('-fs', '--fromsandbox', help='Sandbox GUID to copy from (optional)')
-    parser.add_argument('-t', '--toapp', help='App GUID to copy to')
+    parser.add_argument('-t', '--toapp', help='App GUID to copy to',default='e00886ff-806a-4682-adb4-f3227741fcec')
     parser.add_argument('-ts', '--tosandbox', help="Sandbox GUID to copy to (optional)")
     parser.add_argument('-p', '--prompt', action='store_true', help='Specify to prompt for the applications to copy from and to.')
     parser.add_argument('-d', '--dry_run', action='store_true', help="Log matched flaws instead of applying mitigations")
