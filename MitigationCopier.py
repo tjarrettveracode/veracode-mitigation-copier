@@ -1,4 +1,3 @@
-import requests
 import sys
 import argparse
 import logging
@@ -7,7 +6,7 @@ import datetime
 from urllib import parse
 
 import anticrlf
-from veracode_api_py.api import VeracodeAPI as vapi
+from veracode_api_py.api import VeracodeAPI as vapi, Applications
 from veracode_api_py.constants import Constants
 
 LINE_NUMBER_SLOP = 3 #adjust to allow for line number movement
@@ -48,6 +47,12 @@ def prompt_for_app(prompt_text):
         appguid = app_candidates[0].get('guid')
 
     return appguid
+
+def get_app_guid_from_legacy_id(app_id):
+    app = Applications().get(legacy_id=app_id)
+    if app is None:
+        return
+    return app['_embedded']['applications'][0]['guid']
 
 def get_application_name(guid):
     app = vapi().get_app(guid)
@@ -224,12 +229,13 @@ def main():
         description='This script looks at the results set of the FROM APP. For any flaws that have an '
                     'accepted mitigation, it checks the TO APP to see if that flaw exists. If it exists, '
                     'it copies all mitigation information.')
-    parser.add_argument('-f', '--fromapp', help='App GUID to copy from',default='b934658e-a71e-4ab9-bc14-7011d2184d2b')
+    parser.add_argument('-f', '--fromapp', help='App GUID to copy from')
     parser.add_argument('-fs', '--fromsandbox', help='Sandbox GUID to copy from (optional)')
-    parser.add_argument('-t', '--toapp', help='App GUID to copy to',default='e00886ff-806a-4682-adb4-f3227741fcec')
+    parser.add_argument('-t', '--toapp', help='App GUID to copy to')
     parser.add_argument('-ts', '--tosandbox', help="Sandbox GUID to copy to (optional)")
     parser.add_argument('-p', '--prompt', action='store_true', help='Specify to prompt for the applications to copy from and to.')
     parser.add_argument('-d', '--dry_run', action='store_true', help="Log matched flaws instead of applying mitigations")
+    parser.add_argument('-l', '--legacy_ids',action='store_true', help='Use legacy Veracode app IDs instead of GUIDs')
     args = parser.parse_args()
 
     setup_logger()
@@ -244,6 +250,7 @@ def main():
     results_to_sandbox_id = args.tosandbox
     prompt = args.prompt
     dry_run = args.dry_run
+    legacy_ids = args.legacy_ids
 
     if prompt:
         results_from_app_id = prompt_for_app("Enter the application name to copy mitigations from: ")
@@ -252,6 +259,12 @@ def main():
     if ( results_from_app_id == None ) or ( results_to_app_id == None ):
         print('You must provide an application to copy mitigations to and from.')
         return
+
+    if legacy_ids:
+        results_from = get_app_guid_from_legacy_id(results_from_app_id)
+        results_to = get_app_guid_from_legacy_id(results_to_app_id)
+        results_from_app_id = results_from
+        results_to_app_id = results_to
 
     # get static findings and apply mitigations
 
