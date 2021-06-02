@@ -1,13 +1,5 @@
 # Veracode Mitigation Copier
 
-## Required Libraries
-
-`veracode-api-py`, `requests`, and `logging-formatter-anticrlf`, which can be installed using `pip` (or `pip3`):
-
-    pip install -r requirements.txt
-
-## Description
-
 Copies mitigations from one Veracode profile to another if it's the same flaw based on the following flaw attributes:
 
 - **Static**: `cweid`, `type`, `sourcefile`, and `line` (see Note 1 below)
@@ -16,20 +8,63 @@ Copies mitigations from one Veracode profile to another if it's the same flaw ba
 
 The script will copy all proposed and accepted mitigations for the flaw. The script will skip a flaw in the `copy_to` build if it already has an accepted mitigation.
 
-API credentials are supplied using the [standard Veracode methods](https://help.veracode.com/go/c_configure_api_cred_file) (either via a `.veracode/credentials` file or via environment variables).
+## Setup
 
-## Parameters
+Clone this repository:
 
-1. `-f`, `--fromapp` - Application GUID that you want to copy mitigations from.
-1. `-fs`, `--fromsandbox` (optional) - Sandbox GUID that you want to copy mitigations from.
-1. `-t`, `--toapp` - Application GUID that you want to copy mitigations to.
-1. `-ts`, `--tosandbox` (optional) - Sandbox GUID that you want to copy mitigations to.
-1. `-p`, `--prompt` - Specify to prompt for the applications to copy from and to.
-1. `-d`, `--dry_run` (optional) - Specify to log potential copied mitigations rather than actually mitigating the findings.
+    git clone https://github.com/tjarrettveracode/veracode-mitigation-copier
+
+Install dependencies:
+
+    cd veracode-mitigation-copier
+    pip install -r requirements.txt
+
+(Optional) Save Veracode API credentials in `~/.veracode/credentials`
+
+    [default]
+    veracode_api_key_id = <YOUR_API_KEY_ID>
+    veracode_api_key_secret = <YOUR_API_KEY_SECRET>
+
+## Run
+
+If you have saved credentials as above you can run:
+
+    python MitigationCopier.py (arguments)
+
+Otherwise you will need to set environment variables:
+
+    export VERACODE_API_KEY_ID=<YOUR_API_KEY_ID>
+    export VERACODE_API_KEY_SECRET=<YOUR_API_KEY_SECRET>
+    python MitigationCopier.py (arguments)
+
+Arguments supported include:
+
+- `-f`, `--fromapp` - Application GUID that you want to copy mitigations from.
+- `-fs`, `--fromsandbox` (optional) - Sandbox GUID that you want to copy mitigations from.
+- `-t`, `--toapp` - Application GUID that you want to copy mitigations to.
+- `-ts`, `--tosandbox` (optional) - Sandbox GUID that you want to copy mitigations to.
+- `-p`, `--prompt` - Specify to prompt for the applications to copy from and to.
+- `-d`, `--dry_run` (optional) - Specify to log potential copied mitigations rather than actually mitigating the findings.
 
 ## Logging
 
 The script creates a `MitigationCopier.log` file. All actions are logged.
+
+## Usage examples
+
+### Copy from one application profile to another with prompts
+
+    python MitigationCopier.py --prompt
+
+### Copy from one application profile to another, specifying the profiles
+
+    python MitigationCopier.py --fromapp abcdefgh-1234-abcd-1234-123456789012 --toapp 12345678-abcd-1234-abcd-abcdefghijkl
+
+You must provide the application GUID values for both application profiles. You can look these up by calling the [Veracode Applications API](https://help.veracode.com/r/c_apps_intro) (or use the `--prompt` argument and copy the GUIDs from the console output).
+
+### See which findings are affected in a target profile, but don't copy the mitigations
+
+    python MitigationCopier.py --prompt --dryrun
 
 ## Notes
 
