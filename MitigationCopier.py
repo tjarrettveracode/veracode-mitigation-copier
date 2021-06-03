@@ -137,11 +137,14 @@ def get_matched_policy_finding(origin_finding, potential_findings, scan_type='ST
             (origin_finding['vulnerable_parameter'] == pf['vulnerable_parameter']))), None)
     return match
 
-def update_mitigation_info_rest(to_app_guid,flaw_id,action,comment,sandbox_guid=None):
+def update_mitigation_info_rest(to_app_guid,flaw_id,action,comment,sandbox_guid=None, propose_only=False):
     if action == 'CONFORMS' or action == 'DEVIATES':
         log.warning('Cannot copy {} mitigation for Flaw ID {} in {}'.format(action,flaw_id,to_app_guid))
         return
     elif action == 'APPROVED':
+        if propose_only:
+            log.info('propose_only set to True; skipping applying approval for flaw_id {}'.format(flaw_id))
+            return
         action = Constants.ANNOT_TYPE[action]
     flaw_id_list = [flaw_id]
     if sandbox_guid==None:
@@ -159,7 +162,7 @@ def set_in_memory_flaw_to_approved(findings_to,to_id):
             if (finding["id"] == to_id):
                 finding['finding']['finding_status']['resolution_status'] = 'APPROVED'
 
-def match_for_scan_type(from_app_guid, to_app_guid, dry_run, scan_type='STATIC',from_sandbox_guid=None, to_sandbox_guid=None):
+def match_for_scan_type(from_app_guid, to_app_guid, dry_run, scan_type='STATIC',from_sandbox_guid=None, to_sandbox_guid=None, propose_only=False):
     results_from_app_name = get_application_name(from_app_guid)
     formatted_from = format_application_name(from_app_guid,results_from_app_name)
     logprint('Getting {} findings for {}'.format(scan_type.lower(),formatted_from))
@@ -217,7 +220,7 @@ def match_for_scan_type(from_app_guid, to_app_guid, dry_run, scan_type='STATIC',
             proposal_action = mitigation_action['action']
             proposal_comment = '[COPIED FROM APP {}] {}'.format(from_app_guid, mitigation_action['comment'])
             if not(dry_run):
-                update_mitigation_info_rest(to_app_guid, to_id, proposal_action, proposal_comment, to_sandbox_guid)
+                update_mitigation_info_rest(to_app_guid, to_id, proposal_action, proposal_comment, to_sandbox_guid, propose_only)
 
         set_in_memory_flaw_to_approved(copy_array_to,to_id) # so we don't attempt to mitigate approved finding twice
         counter += 1
@@ -236,6 +239,7 @@ def main():
     parser.add_argument('-p', '--prompt', action='store_true', help='Specify to prompt for the applications to copy from and to.')
     parser.add_argument('-d', '--dry_run', action='store_true', help="Log matched flaws instead of applying mitigations")
     parser.add_argument('-l', '--legacy_ids',action='store_true', help='Use legacy Veracode app IDs instead of GUIDs')
+    parser.add_argument('-po', '--propose_only',action='store_true', help='Only propose mitigations, do not approve them')
     args = parser.parse_args()
 
     setup_logger()
@@ -251,6 +255,7 @@ def main():
     prompt = args.prompt
     dry_run = args.dry_run
     legacy_ids = args.legacy_ids
+    propose_only = args.propose_only
 
     if prompt:
         results_from_app_id = prompt_for_app("Enter the application name to copy mitigations from: ")
@@ -269,9 +274,10 @@ def main():
     # get static findings and apply mitigations
 
     match_for_scan_type(from_app_guid=results_from_app_id, to_app_guid=results_to_app_id, dry_run=dry_run, scan_type='STATIC',
-        from_sandbox_guid=results_from_sandbox_id,to_sandbox_guid=results_to_sandbox_id)
+        from_sandbox_guid=results_from_sandbox_id,to_sandbox_guid=results_to_sandbox_id,propose_only=propose_only)
 
-    match_for_scan_type(from_app_guid=results_from_app_id, to_app_guid=results_to_app_id, dry_run=dry_run, scan_type='DYNAMIC')
+    match_for_scan_type(from_app_guid=results_from_app_id, to_app_guid=results_to_app_id, dry_run=dry_run, 
+        scan_type='DYNAMIC',propose_only=propose_only)
 
 if __name__ == '__main__':
     main()

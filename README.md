@@ -46,6 +46,7 @@ Arguments supported include:
 - `-p`, `--prompt` - Specify to prompt for the applications to copy from and to.
 - `-d`, `--dry_run` (optional) - Specify to log potential copied mitigations rather than actually mitigating the findings.
 - `-l`, `--legacy_ids` (optional) - If specified, accepts legacy Veracode application IDs rather than application GUIDs.
+- `-po`, `--propose-only` (optional) - If specified, only propose mitigations; do not approve the copied mitigations.
 
 ## Logging
 
