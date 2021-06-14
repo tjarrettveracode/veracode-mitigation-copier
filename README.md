@@ -45,8 +45,9 @@ Arguments supported include:
 - `-ts`, `--tosandbox` (optional) - Sandbox GUID that you want to copy mitigations to.
 - `-p`, `--prompt` - Specify to prompt for the applications to copy from and to.
 - `-d`, `--dry_run` (optional) - Specify to log potential copied mitigations rather than actually mitigating the findings.
-- `-l`, `--legacy_ids` (optional) - If specified, accepts legacy Veracode application IDs rather than application GUIDs.
+- `-l`, `--legacy_ids` (optional) - Specify to use legacy Veracode application IDs rather than application GUIDs.
 - `-po`, `--propose-only` (optional) - If specified, only propose mitigations; do not approve the copied mitigations.
+- `-i`, `--id_list` (optional) - If specified, only copy mitigations from the `fromapp` for the flaw IDs in `id_list`.
 
 ## Logging
 
@@ -61,6 +62,10 @@ The script creates a `MitigationCopier.log` file. All actions are logged.
 ### Copy from one application profile to another, specifying the profiles
 
     python MitigationCopier.py --fromapp abcdefgh-1234-abcd-1234-123456789012 --toapp 12345678-abcd-1234-abcd-abcdefghijkl
+
+### Copy mitigations for a subset of findings
+
+    python MitigationCopier.py --fromapp abcdefgh-1234-abcd-1234-123456789012 --toapp 12345678-abcd-1234-abcd-abcdefghijkl --id_list 1 2 3
 
 You must provide the application GUID values for both application profiles. You can look these up by calling the [Veracode Applications API](https://help.veracode.com/r/c_apps_intro) (or use the `--prompt` argument and copy the GUIDs from the console output).
 

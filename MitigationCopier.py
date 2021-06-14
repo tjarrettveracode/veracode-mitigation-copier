@@ -71,7 +71,11 @@ def logprint(log_msg):
     log.info(log_msg)
     print(log_msg)
 
-def filter_approved(findings):
+def filter_approved(findings,id_list):
+    if id_list is not None:
+        log.info('Only copying the following findings provided in id_list: {}'.format(id_list))
+        findings = [f for f in findings if f['issue_id'] in id_list]
+    
     return [f for f in findings if (f['finding_status']['resolution_status'] == 'APPROVED')]
 
 def format_finding_lookup(flaw):
@@ -162,7 +166,8 @@ def set_in_memory_flaw_to_approved(findings_to,to_id):
             if (finding["id"] == to_id):
                 finding['finding']['finding_status']['resolution_status'] = 'APPROVED'
 
-def match_for_scan_type(from_app_guid, to_app_guid, dry_run, scan_type='STATIC',from_sandbox_guid=None, to_sandbox_guid=None, propose_only=False):
+def match_for_scan_type(from_app_guid, to_app_guid, dry_run, scan_type='STATIC',from_sandbox_guid=None, 
+        to_sandbox_guid=None, propose_only=False, id_list=[]):
     results_from_app_name = get_application_name(from_app_guid)
     formatted_from = format_application_name(from_app_guid,results_from_app_name)
     logprint('Getting {} findings for {}'.format(scan_type.lower(),formatted_from))
@@ -172,7 +177,7 @@ def match_for_scan_type(from_app_guid, to_app_guid, dry_run, scan_type='STATIC',
     if count_from == 0:
         return 0 # no source findings to copy!   
    
-    findings_from_approved = filter_approved(findings_from)
+    findings_from_approved = filter_approved(findings_from,id_list)
 
     if len(findings_from_approved) == 0:
         logprint('No approved findings in "from" {}. Exiting.'.format(formatted_from))
@@ -240,6 +245,7 @@ def main():
     parser.add_argument('-d', '--dry_run', action='store_true', help="Log matched flaws instead of applying mitigations")
     parser.add_argument('-l', '--legacy_ids',action='store_true', help='Use legacy Veracode app IDs instead of GUIDs')
     parser.add_argument('-po', '--propose_only',action='store_true', help='Only propose mitigations, do not approve them')
+    parser.add_argument('-i','--id_list',nargs='*', help='Only copy mitigations for the flaws in the id_list')
     args = parser.parse_args()
 
     setup_logger()
@@ -256,6 +262,7 @@ def main():
     dry_run = args.dry_run
     legacy_ids = args.legacy_ids
     propose_only = args.propose_only
+    id_list = args.id_list
 
     if prompt:
         results_from_app_id = prompt_for_app("Enter the application name to copy mitigations from: ")
@@ -274,10 +281,10 @@ def main():
     # get static findings and apply mitigations
 
     match_for_scan_type(from_app_guid=results_from_app_id, to_app_guid=results_to_app_id, dry_run=dry_run, scan_type='STATIC',
-        from_sandbox_guid=results_from_sandbox_id,to_sandbox_guid=results_to_sandbox_id,propose_only=propose_only)
+        from_sandbox_guid=results_from_sandbox_id,to_sandbox_guid=results_to_sandbox_id,propose_only=propose_only,id_list=id_list)
 
     match_for_scan_type(from_app_guid=results_from_app_id, to_app_guid=results_to_app_id, dry_run=dry_run, 
-        scan_type='DYNAMIC',propose_only=propose_only)
+        scan_type='DYNAMIC',propose_only=propose_only,id_list=id_list)
 
 if __name__ == '__main__':
     main()
