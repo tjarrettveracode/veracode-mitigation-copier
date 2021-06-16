@@ -127,9 +127,17 @@ def get_matched_policy_finding(origin_finding, potential_findings, scan_type='ST
     match = None
     if scan_type == 'STATIC':
         if origin_finding['source_file'] is not None:
+            #attempt precise match first
             match = next((pf for pf in potential_findings if ((origin_finding['cwe'] == int(pf['cwe'])) & 
                 (origin_finding['source_file'].find(pf['source_file']) > -1 ) & 
-                ((origin_finding['line'] - LINE_NUMBER_SLOP) <= pf['line'] <= (origin_finding['line'] + LINE_NUMBER_SLOP)))), None)
+                (origin_finding['line'] == pf['line'] ))), None)
+
+            if match is None:
+                #then fall to fuzzy match
+                match = next((pf for pf in potential_findings if ((origin_finding['cwe'] == int(pf['cwe'])) & 
+                    (origin_finding['source_file'].find(pf['source_file']) > -1 ) & 
+                    ((origin_finding['line'] - LINE_NUMBER_SLOP) <= pf['line'] <= (origin_finding['line'] + LINE_NUMBER_SLOP)))), None)
+
         else:
             # if we don't have source file info try matching on procedure and relative location
             match = next((pf for pf in potential_findings if ((origin_finding['cwe'] == int(pf['cwe'])) & 
