@@ -93,6 +93,21 @@ def format_finding_lookup(flaw):
 
     return finding_lookup
 
+def format_file_path(file_path):
+
+    # special case - omit prefix for teamcity work directories, which look like this:
+    # teamcity/buildagent/work/d2a72efd0db7f7d7
+    prefix_length = 42
+    suffix_length = len(file_path)
+
+    tmp_file_path = file_path[0:25]
+    if tmp_file_path == 'teamcity/buildagent/work/':
+        formatted_file_path = file_path[prefix_length:suffix_length]
+    else:
+        formatted_file_path = file_path
+
+    return formatted_file_path
+
 def create_match_format_policy(app_guid, sandbox_guid, policy_findings, finding_type):
     findings = []
 
@@ -104,7 +119,7 @@ def create_match_format_policy(app_guid, sandbox_guid, policy_findings, finding_
                 'cwe': pf['finding_details']['cwe']['id'],
                 'procedure': pf['finding_details'].get('procedure'),
                 'relative_location': pf['finding_details'].get('relative_location'),
-                'source_file': pf['finding_details'].get('file_path'),
+                'source_file': format_file_path(pf['finding_details'].get('file_path')),
                 'line': pf['finding_details'].get('file_line_number'),
                 'finding': pf} for pf in policy_findings]
         findings.extend(thesefindings)
@@ -119,8 +134,11 @@ def create_match_format_policy(app_guid, sandbox_guid, policy_findings, finding_
         findings.extend(thesefindings)
     return findings
 
-def format_application_name(guid, app_name):
-    formatted_name = 'application {} (guid: {})'.format(app_name,guid)
+def format_application_name(guid, app_name, sandbox_guid=None):
+    if sandbox_guid is None:
+        formatted_name = 'application {} (guid: {})'.format(app_name,guid)
+    else:
+        formatted_name = 'sandbox {} in application {} (guid: {})'.format(sandbox_guid,app_name,guid)
     return formatted_name
 
 def get_matched_policy_finding(origin_finding, potential_findings, scan_type='STATIC'):
@@ -177,7 +195,7 @@ def set_in_memory_flaw_to_approved(findings_to,to_id):
 def match_for_scan_type(from_app_guid, to_app_guid, dry_run, scan_type='STATIC',from_sandbox_guid=None, 
         to_sandbox_guid=None, propose_only=False, id_list=[]):
     results_from_app_name = get_application_name(from_app_guid)
-    formatted_from = format_application_name(from_app_guid,results_from_app_name)
+    formatted_from = format_application_name(from_app_guid,results_from_app_name,from_sandbox_guid)
     logprint('Getting {} findings for {}'.format(scan_type.lower(),formatted_from))
     findings_from = get_findings_by_type(from_app_guid,scan_type=scan_type, sandbox_guid=from_sandbox_guid)
     count_from = len(findings_from)
@@ -192,7 +210,7 @@ def match_for_scan_type(from_app_guid, to_app_guid, dry_run, scan_type='STATIC',
         return 0
 
     results_to_app_name = get_application_name(to_app_guid)
-    formatted_to = format_application_name(to_app_guid,results_to_app_name)
+    formatted_to = format_application_name(to_app_guid,results_to_app_name,to_sandbox_guid)
 
     logprint('Getting {} findings for {}'.format(scan_type.lower(),formatted_to))
     findings_to = get_findings_by_type(to_app_guid,scan_type=scan_type, sandbox_guid=to_sandbox_guid)
@@ -216,6 +234,7 @@ def match_for_scan_type(from_app_guid, to_app_guid, dry_run, scan_type='STATIC',
         match = get_matched_policy_finding(thisfinding, copy_array_to, scan_type)
 
         if match == None:
+            log.info('No match found for finding {} in {}'.format(from_id,formatted_from))
             continue
 
         to_id = match.get('id')
@@ -257,6 +276,8 @@ def main():
     args = parser.parse_args()
 
     setup_logger()
+
+    logprint('======== beginning MitigationCopier.py run ========')
 
     # CHECK FOR CREDENTIALS EXPIRATION
     creds_expire_days_warning()
