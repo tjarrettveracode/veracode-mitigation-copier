@@ -89,7 +89,7 @@ jobs:
         SRCCLR_API_TOKEN: ${{ secrets.SRCCLR_API_TOKEN }}
         SRCCLR_SCM_TYPE: GITHUB
         SRCCLR_SCM_TOKEN: ${{ secrets.SCM_GITHUB }} 
-        SRCCLR_PR_ON: low
+        SRCCLR_PR_ON: methods
         SRCCLR_NO_BREAKING_UPDATES: true
         SRCCLR_IGNORE_CLOSED_PRS: true
         SRCCLR_SCM_URL: https://github.com/$GITHUB_REPOSITORY
