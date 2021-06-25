@@ -78,4 +78,21 @@ jobs:
     - uses: github/codeql-action/upload-sarif@v1
       with:
     # Path to SARIF file relative to the root of the repository
-        sarif_file: veracode-results.sarif     
+        sarif_file: veracode-results.sarif   
+
+  opensource-scan:
+    runs-on: ubuntu-latest
+    steps:
+    - name: SCA Agent scan
+      env: # Set the secret as an input
+        SRCCLR_API_TOKEN: ${{ secrets.SRCCLR_API_TOKEN }}
+        SRCCLR_SCM_TYPE: GITHUB
+        SRCCLR_PR_ON: medium
+        SRCCLR_NO_BREAKING_UPDATES: true
+        SRCCLR_IGNORE_CLOSED_PRS: true
+        SRCCLR_SCM_URL: https://github.com/$GITHUB_REPOSITORY
+        EXTRA_ARGS: '--update-advisor --pull-request --unmatched'
+      run: |
+        git config --global user.email "${{ secrets.USER_EMAIL }}"
+        git config --global user.name "${{ secrets.USER_NAME }}"
+        curl -sSL https://download.sourceclear.com/ci.sh | sh -s -- scan $EXTRA_ARGS
