@@ -97,12 +97,14 @@ def format_file_path(file_path):
 
     # special case - omit prefix for teamcity work directories, which look like this:
     # teamcity/buildagent/work/d2a72efd0db7f7d7
-    prefix_length = 42
     suffix_length = len(file_path)
 
-    tmp_file_path = file_path[0:25]
-    if tmp_file_path == 'teamcity/buildagent/work/':
-        formatted_file_path = file_path[prefix_length:suffix_length]
+    buildagent_loc = file_path.find('teamcity/buildagent/work/')
+
+    if buildagent_loc > 0:
+        #strip everything starting with this prefix plus the 17 characters after
+        # (25 characters for find string, 16 character random hash value, plus / )
+        formatted_file_path = file_path[(buildagent_loc + 42):suffix_length]
     else:
         formatted_file_path = file_path
 
@@ -141,6 +143,15 @@ def format_application_name(guid, app_name, sandbox_guid=None):
         formatted_name = 'sandbox {} in application {} (guid: {})'.format(sandbox_guid,app_name,guid)
     return formatted_name
 
+def get_matched_policy_finding_nondebug(origin_finding, potential_findings):
+    match = None
+
+    match = next((pf for pf in potential_findings if ((origin_finding['cwe'] == int(pf['cwe'])) & 
+                (origin_finding['procedure'].find(pf['procedure']) > -1 ) & 
+                (origin_finding['relative_location'] == pf['relative_location'] ))), None)
+
+    return match
+
 def get_matched_policy_finding(origin_finding, potential_findings, scan_type='STATIC'):
     match = None
     if scan_type == 'STATIC':
@@ -156,11 +167,13 @@ def get_matched_policy_finding(origin_finding, potential_findings, scan_type='ST
                     (origin_finding['source_file'].find(pf['source_file']) > -1 ) & 
                     ((origin_finding['line'] - LINE_NUMBER_SLOP) <= pf['line'] <= (origin_finding['line'] + LINE_NUMBER_SLOP)))), None)
 
+            if match is None:
+                #then fall to nondebug as a last resort
+                match = get_matched_policy_finding_nondebug(origin_finding,potential_findings)
         else:
             # if we don't have source file info try matching on procedure and relative location
-            match = next((pf for pf in potential_findings if ((origin_finding['cwe'] == int(pf['cwe'])) & 
-                (origin_finding['procedure'].find(pf['procedure']) > -1 ) & 
-                (origin_finding['relative_location'] == pf['relative_location'] ))), None)
+            match = get_matched_policy_finding_nondebug(origin_finding,potential_findings)
+
     elif scan_type == 'DYNAMIC':
         match = next((pf for pf in potential_findings if ((origin_finding['cwe'] == int(pf['cwe'])) & 
             (origin_finding['path'] == pf['path']) &
