@@ -8,6 +8,8 @@ Copies mitigations from one Veracode profile to another if it's the same flaw ba
 
 The script will copy all proposed and accepted mitigations for the flaw. The script will skip a flaw in the `copy_to` build if it already has an accepted mitigation.
 
+*Note*: This script requires Python 3!
+
 ## Setup
 
 Clone this repository:
@@ -77,7 +79,7 @@ You must provide the legacy Veracode application ID values for both application 
 
 ### See which findings are affected in a target profile, but don't copy the mitigations
 
-    python MitigationCopier.py --prompt --dryrun
+    python MitigationCopier.py --prompt --dry_run
 
 ## Notes
 

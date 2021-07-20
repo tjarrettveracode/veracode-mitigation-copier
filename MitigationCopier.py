@@ -3,13 +3,10 @@ import argparse
 import logging
 import json
 import datetime
-from urllib import parse
 
 import anticrlf
-from veracode_api_py.api import VeracodeAPI as vapi, Applications
+from veracode_api_py.api import VeracodeAPI as vapi, Applications, Findings
 from veracode_api_py.constants import Constants
-
-LINE_NUMBER_SLOP = 3 #adjust to allow for line number movement
 
 log = logging.getLogger(__name__)
 
@@ -30,7 +27,7 @@ def creds_expire_days_warning():
 def prompt_for_app(prompt_text):
     appguid = ""
     app_name_search = input(prompt_text)
-    app_candidates = vapi().get_app_by_name(parse.quote(app_name_search))
+    app_candidates = Applications().get_by_name(app_name_search)
     if len(app_candidates) == 0:
         print("No matches were found!")
     elif len(app_candidates) > 1:
@@ -55,15 +52,15 @@ def get_app_guid_from_legacy_id(app_id):
     return app['_embedded']['applications'][0]['guid']
 
 def get_application_name(guid):
-    app = vapi().get_app(guid)
+    app = Applications().get(guid)
     return app['profile']['name']
 
 def get_findings_by_type(app_guid, scan_type='STATIC', sandbox_guid=None):
     findings = []
     if scan_type == 'STATIC':
-        findings = vapi().get_findings(app_guid,scantype=scan_type,annot='TRUE',sandbox=sandbox_guid)
+        findings = Findings().get_findings(app_guid,scantype=scan_type,annot='TRUE',sandbox=sandbox_guid)
     elif scan_type == 'DYNAMIC':
-        findings = vapi().get_findings(app_guid,scantype=scan_type,annot='TRUE')
+        findings = Findings().get_findings(app_guid,scantype=scan_type,annot='TRUE')
         
     return findings
 
@@ -77,21 +74,6 @@ def filter_approved(findings,id_list):
         findings = [f for f in findings if f['issue_id'] in id_list]
     
     return [f for f in findings if (f['finding_status']['resolution_status'] == 'APPROVED')]
-
-def format_finding_lookup(flaw):
-    finding_lookup = ''
-
-    if flaw['scan_type'] == 'STATIC':
-        finding_lookup = str(flaw['finding_details']['cwe']['id']) + flaw['scan_type'] + \
-                                        flaw['finding_details']['file_name'] + \
-                                        str(flaw['finding_details']['file_line_number'])
-    elif flaw['scan_type'] == 'DYNAMIC':
-        finding_lookup = str(flaw['finding_details']['cwe']['id']) + flaw['scan_type'] + \
-                                        flaw['finding_details'].get('path','') + \
-                                        flaw['finding_details'].get('vulnerable_parameter','')
-        log.debug('Dynamic finding: {}'.format(finding_lookup))
-
-    return finding_lookup
 
 def format_file_path(file_path):
 
@@ -143,44 +125,11 @@ def format_application_name(guid, app_name, sandbox_guid=None):
         formatted_name = 'sandbox {} in application {} (guid: {})'.format(sandbox_guid,app_name,guid)
     return formatted_name
 
-def get_matched_policy_finding_nondebug(origin_finding, potential_findings):
-    match = None
-
-    match = next((pf for pf in potential_findings if ((origin_finding['cwe'] == int(pf['cwe'])) & 
-                (origin_finding['procedure'].find(pf['procedure']) > -1 ) & 
-                (origin_finding['relative_location'] == pf['relative_location'] ))), None)
-
-    return match
-
-def get_matched_policy_finding(origin_finding, potential_findings, scan_type='STATIC'):
-    match = None
-    if scan_type == 'STATIC':
-        if origin_finding['source_file'] is not None:
-            #attempt precise match first
-            match = next((pf for pf in potential_findings if ((origin_finding['cwe'] == int(pf['cwe'])) & 
-                (origin_finding['source_file'].find(pf['source_file']) > -1 ) & 
-                (origin_finding['line'] == pf['line'] ))), None)
-
-            if match is None:
-                #then fall to fuzzy match
-                match = next((pf for pf in potential_findings if ((origin_finding['cwe'] == int(pf['cwe'])) & 
-                    (origin_finding['source_file'].find(pf['source_file']) > -1 ) & 
-                    ((origin_finding['line'] - LINE_NUMBER_SLOP) <= pf['line'] <= (origin_finding['line'] + LINE_NUMBER_SLOP)))), None)
-
-            if match is None:
-                #then fall to nondebug as a last resort
-                match = get_matched_policy_finding_nondebug(origin_finding,potential_findings)
-        else:
-            # if we don't have source file info try matching on procedure and relative location
-            match = get_matched_policy_finding_nondebug(origin_finding,potential_findings)
-
-    elif scan_type == 'DYNAMIC':
-        match = next((pf for pf in potential_findings if ((origin_finding['cwe'] == int(pf['cwe'])) & 
-            (origin_finding['path'] == pf['path']) &
-            (origin_finding['vulnerable_parameter'] == pf['vulnerable_parameter']))), None)
-    return match
-
 def update_mitigation_info_rest(to_app_guid,flaw_id,action,comment,sandbox_guid=None, propose_only=False):
+    # validate length of comment argument, gracefully handle overage
+    if len(comment) > 2048:
+        comment = comment[0:2048]
+
     if action == 'CONFORMS' or action == 'DEVIATES':
         log.warning('Cannot copy {} mitigation for Flaw ID {} in {}'.format(action,flaw_id,to_app_guid))
         return
@@ -191,9 +140,9 @@ def update_mitigation_info_rest(to_app_guid,flaw_id,action,comment,sandbox_guid=
         action = Constants.ANNOT_TYPE[action]
     flaw_id_list = [flaw_id]
     if sandbox_guid==None:
-        vapi().add_annotation(to_app_guid,flaw_id_list,comment,action)
+        Findings().add_annotation(to_app_guid,flaw_id_list,comment,action)
     else:
-        vapi().add_annotation(to_app_guid,flaw_id_list,comment,action,sandbox=sandbox_guid)
+        Findings().add_annotation(to_app_guid,flaw_id_list,comment,action,sandbox=sandbox_guid)
     log.info(
         'Updated mitigation information to {} for Flaw ID {} in {}'.format(action, str(flaw_id_list), to_app_guid))
 
@@ -232,9 +181,6 @@ def match_for_scan_type(from_app_guid, to_app_guid, dry_run, scan_type='STATIC',
     if count_to == 0:
         return 0 # no destination findings to mitigate!
 
-    # GET DATA FOR BUILD COPYING FROM
-    copy_array_from = create_match_format_policy( app_guid=from_app_guid, sandbox_guid=from_sandbox_guid, policy_findings=findings_from_approved,finding_type=scan_type)
-
     # CREATE LIST OF UNIQUE VALUES FOR BUILD COPYING TO
     copy_array_to = create_match_format_policy( app_guid=to_app_guid, sandbox_guid=to_sandbox_guid, policy_findings=findings_to,finding_type=scan_type)
     
@@ -242,9 +188,9 @@ def match_for_scan_type(from_app_guid, to_app_guid, dry_run, scan_type='STATIC',
     counter = 0
 
     # look for a match for each finding in the TO list and apply mitigations of the matching flaw, if found
-    for thisfinding in copy_array_from:
-        from_id = thisfinding['id']
-        match = get_matched_policy_finding(thisfinding, copy_array_to, scan_type)
+    for thisfinding in findings_to:
+        from_id = thisfinding['issue_id']
+        match = Findings().match(thisfinding,findings_from)
 
         if match == None:
             log.info('No match found for finding {} in {}'.format(from_id,formatted_from))
@@ -277,12 +223,12 @@ def main():
         description='This script looks at the results set of the FROM APP. For any flaws that have an '
                     'accepted mitigation, it checks the TO APP to see if that flaw exists. If it exists, '
                     'it copies all mitigation information.')
-    parser.add_argument('-f', '--fromapp', help='App GUID to copy from')
+    parser.add_argument('-f', '--fromapp', help='App GUID to copy from' )
     parser.add_argument('-fs', '--fromsandbox', help='Sandbox GUID to copy from (optional)')
     parser.add_argument('-t', '--toapp', help='App GUID to copy to')
     parser.add_argument('-ts', '--tosandbox', help="Sandbox GUID to copy to (optional)")
-    parser.add_argument('-p', '--prompt', action='store_true', help='Specify to prompt for the applications to copy from and to.')
-    parser.add_argument('-d', '--dry_run', action='store_true', help="Log matched flaws instead of applying mitigations")
+    parser.add_argument('-p', '--prompt', action='store_true', help='Specify to prompt for the applications to copy from and to.',default=True)
+    parser.add_argument('-d', '--dry_run', action='store_true', help="Log matched flaws instead of applying mitigations",default=True)
     parser.add_argument('-l', '--legacy_ids',action='store_true', help='Use legacy Veracode app IDs instead of GUIDs')
     parser.add_argument('-po', '--propose_only',action='store_true', help='Only propose mitigations, do not approve them')
     parser.add_argument('-i','--id_list',nargs='*', help='Only copy mitigations for the flaws in the id_list')
@@ -310,7 +256,7 @@ def main():
         results_from_app_id = prompt_for_app("Enter the application name to copy mitigations from: ")
         results_to_app_id = prompt_for_app("Enter the application name to copy mitigations to: ")
 
-    if ( results_from_app_id == None ) or ( results_to_app_id == None ):
+    if ( results_from_app_id == '' ) or ( results_to_app_id == '' ):
         print('You must provide an application to copy mitigations to and from.')
         return
 
