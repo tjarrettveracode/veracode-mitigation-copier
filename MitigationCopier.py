@@ -79,6 +79,9 @@ def format_file_path(file_path):
 
     # special case - omit prefix for teamcity work directories, which look like this:
     # teamcity/buildagent/work/d2a72efd0db7f7d7
+    if file_path is None:
+        return ''
+    
     suffix_length = len(file_path)
 
     buildagent_loc = file_path.find('teamcity/buildagent/work/')
@@ -223,11 +226,11 @@ def main():
         description='This script looks at the results set of the FROM APP. For any flaws that have an '
                     'accepted mitigation, it checks the TO APP to see if that flaw exists. If it exists, '
                     'it copies all mitigation information.')
-    parser.add_argument('-f', '--fromapp', help='App GUID to copy from' )
-    parser.add_argument('-fs', '--fromsandbox', help='Sandbox GUID to copy from (optional)')
-    parser.add_argument('-t', '--toapp', help='App GUID to copy to')
+    parser.add_argument('-f', '--fromapp', help='App GUID to copy from',default='31a12f03-4223-4271-8788-690d8cd46184' )
+    parser.add_argument('-fs', '--fromsandbox', help='Sandbox GUID to copy from (optional)',default='ace4b31f-c462-4cdf-aca9-2414a9f70648')
+    parser.add_argument('-t', '--toapp', help='App GUID to copy to',default='4bce6e98-48a5-4b4f-9600-3d8fd231e46f')
     parser.add_argument('-ts', '--tosandbox', help="Sandbox GUID to copy to (optional)")
-    parser.add_argument('-p', '--prompt', action='store_true', help='Specify to prompt for the applications to copy from and to.',default=True)
+    parser.add_argument('-p', '--prompt', action='store_true', help='Specify to prompt for the applications to copy from and to.')
     parser.add_argument('-d', '--dry_run', action='store_true', help="Log matched flaws instead of applying mitigations",default=True)
     parser.add_argument('-l', '--legacy_ids',action='store_true', help='Use legacy Veracode app IDs instead of GUIDs')
     parser.add_argument('-po', '--propose_only',action='store_true', help='Only propose mitigations, do not approve them')
@@ -256,7 +259,7 @@ def main():
         results_from_app_id = prompt_for_app("Enter the application name to copy mitigations from: ")
         results_to_app_id = prompt_for_app("Enter the application name to copy mitigations to: ")
 
-    if ( results_from_app_id == '' ) or ( results_to_app_id == '' ):
+    if results_from_app_id in ( None, '' ) or results_to_app_id in ( None, '' ):
         print('You must provide an application to copy mitigations to and from.')
         return
 
