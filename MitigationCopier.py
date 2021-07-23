@@ -191,23 +191,24 @@ def match_for_scan_type(from_app_guid, to_app_guid, dry_run, scan_type='STATIC',
     counter = 0
 
     # look for a match for each finding in the TO list and apply mitigations of the matching flaw, if found
-    for thisfinding in findings_to:
-        from_id = thisfinding['issue_id']
-        match = Findings().match(thisfinding,findings_from)
+    for this_to_finding in findings_to:
+        to_id = this_to_finding['issue_id']
 
-        if match == None:
-            log.info('No match found for finding {} in {}'.format(from_id,formatted_from))
-            continue
-
-        to_id = match.get('id')
-
-        log.info('Source flaw {} in {} has a possible target match in flaw {} in {}.'.format(from_id,formatted_from,to_id,formatted_to))
-
-        if match['finding']['finding_status']['resolution_status'] == 'APPROVED':
+        if this_to_finding['finding_status']['resolution_status'] == 'APPROVED':
             logprint ('Flaw ID {} in {} already has an accepted mitigation; skipped.'.format(to_id,formatted_to))
             continue 
 
-        mitigation_list = thisfinding['finding']['annotations']
+        match = Findings().match(this_to_finding,findings_from)
+
+        if match == None:
+            log.info('No approved match found for finding {} in {}'.format(to_id,formatted_from))
+            continue
+
+        from_id = match.get('id')
+
+        log.info('Source flaw {} in {} has a possible target match in flaw {} in {}.'.format(from_id,formatted_from,to_id,formatted_to))
+
+        mitigation_list = match['finding']['annotations']
         logprint ('Applying {} annotations for flaw ID {} in {}...'.format(len(mitigation_list),to_id,formatted_to))
 
         for mitigation_action in reversed(mitigation_list): #findings API puts most recent action first
@@ -230,7 +231,7 @@ def main():
     parser.add_argument('-fs', '--fromsandbox', help='Sandbox GUID to copy from (optional)')
     parser.add_argument('-t', '--toapp', help='App GUID to copy to')
     parser.add_argument('-ts', '--tosandbox', help="Sandbox GUID to copy to (optional)")
-    parser.add_argument('-p', '--prompt', action='store_true', help='Specify to prompt for the applications to copy from and to.')
+    parser.add_argument('-p', '--prompt', action='store_true', help='Specify to prompt for the applications to copy from and to.',default=True)
     parser.add_argument('-d', '--dry_run', action='store_true', help="Log matched flaws instead of applying mitigations")
     parser.add_argument('-l', '--legacy_ids',action='store_true', help='Use legacy Veracode app IDs instead of GUIDs')
     parser.add_argument('-po', '--propose_only',action='store_true', help='Only propose mitigations, do not approve them')
