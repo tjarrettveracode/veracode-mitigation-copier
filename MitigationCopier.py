@@ -231,7 +231,7 @@ def main():
     parser.add_argument('-fs', '--fromsandbox', help='Sandbox GUID to copy from (optional)')
     parser.add_argument('-t', '--toapp', help='App GUID to copy to')
     parser.add_argument('-ts', '--tosandbox', help="Sandbox GUID to copy to (optional)")
-    parser.add_argument('-p', '--prompt', action='store_true', help='Specify to prompt for the applications to copy from and to.',default=True)
+    parser.add_argument('-p', '--prompt', action='store_true', help='Specify to prompt for the applications to copy from and to.')
     parser.add_argument('-d', '--dry_run', action='store_true', help="Log matched flaws instead of applying mitigations")
     parser.add_argument('-l', '--legacy_ids',action='store_true', help='Use legacy Veracode app IDs instead of GUIDs')
     parser.add_argument('-po', '--propose_only',action='store_true', help='Only propose mitigations, do not approve them')
@@ -259,6 +259,9 @@ def main():
     if prompt:
         results_from_app_id = prompt_for_app("Enter the application name to copy mitigations from: ")
         results_to_app_id = prompt_for_app("Enter the application name to copy mitigations to: ")
+        # ignore Sandbox arguments in the Prompt case
+        results_from_sandbox_id = None
+        results_to_sandbox_id = None
 
     if results_from_app_id in ( None, '' ) or results_to_app_id in ( None, '' ):
         print('You must provide an application to copy mitigations to and from.')

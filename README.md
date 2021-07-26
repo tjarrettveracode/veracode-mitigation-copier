@@ -42,9 +42,9 @@ Otherwise you will need to set environment variables:
 Arguments supported include:
 
 - `-f`, `--fromapp` - Application GUID that you want to copy mitigations from.
-- `-fs`, `--fromsandbox` (optional) - Sandbox GUID that you want to copy mitigations from.
+- `-fs`, `--fromsandbox` (optional) - Sandbox GUID that you want to copy mitigations from. Ignored if `--prompt` is set.
 - `-t`, `--toapp` - Application GUID that you want to copy mitigations to.
-- `-ts`, `--tosandbox` (optional) - Sandbox GUID that you want to copy mitigations to.
+- `-ts`, `--tosandbox` (optional) - Sandbox GUID that you want to copy mitigations to. Ignored if `--prompt` is set.
 - `-p`, `--prompt` - Specify to prompt for the applications to copy from and to.
 - `-d`, `--dry_run` (optional) - Specify to log potential copied mitigations rather than actually mitigating the findings.
 - `-l`, `--legacy_ids` (optional) - Specify to use legacy Veracode application IDs rather than application GUIDs.
