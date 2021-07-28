@@ -158,7 +158,7 @@ def set_in_memory_flaw_to_approved(findings_to,to_id):
                 finding['finding']['finding_status']['resolution_status'] = 'APPROVED'
 
 def match_for_scan_type(from_app_guid, to_app_guid, dry_run, scan_type='STATIC',from_sandbox_guid=None, 
-        to_sandbox_guid=None, propose_only=False, id_list=[]):
+        to_sandbox_guid=None, propose_only=False, id_list=[], fuzzy_match=False):
     results_from_app_name = get_application_name(from_app_guid)
     formatted_from = format_application_name(from_app_guid,results_from_app_name,from_sandbox_guid)
     logprint('Getting {} findings for {}'.format(scan_type.lower(),formatted_from))
@@ -198,7 +198,7 @@ def match_for_scan_type(from_app_guid, to_app_guid, dry_run, scan_type='STATIC',
             logprint ('Flaw ID {} in {} already has an accepted mitigation; skipped.'.format(to_id,formatted_to))
             continue 
 
-        match = Findings().match(this_to_finding,findings_from)
+        match = Findings().match(this_to_finding,findings_from,approved_matches_only=True,allow_fuzzy_match=fuzzy_match)
 
         if match == None:
             log.info('No approved match found for finding {} in {}'.format(to_id,formatted_from))
@@ -236,6 +236,7 @@ def main():
     parser.add_argument('-l', '--legacy_ids',action='store_true', help='Use legacy Veracode app IDs instead of GUIDs')
     parser.add_argument('-po', '--propose_only',action='store_true', help='Only propose mitigations, do not approve them')
     parser.add_argument('-i','--id_list',nargs='*', help='Only copy mitigations for the flaws in the id_list')
+    parser.add_argument('-fm','--fuzzy_match',action='store_true', help='Look within a range of line numbers for a matching flaw')
     args = parser.parse_args()
 
     setup_logger()
@@ -255,6 +256,7 @@ def main():
     legacy_ids = args.legacy_ids
     propose_only = args.propose_only
     id_list = args.id_list
+    fuzzy_match = args.fuzzy_match
 
     if prompt:
         results_from_app_id = prompt_for_app("Enter the application name to copy mitigations from: ")
@@ -276,7 +278,7 @@ def main():
     # get static findings and apply mitigations
 
     match_for_scan_type(from_app_guid=results_from_app_id, to_app_guid=results_to_app_id, dry_run=dry_run, scan_type='STATIC',
-        from_sandbox_guid=results_from_sandbox_id,to_sandbox_guid=results_to_sandbox_id,propose_only=propose_only,id_list=id_list)
+        from_sandbox_guid=results_from_sandbox_id,to_sandbox_guid=results_to_sandbox_id,propose_only=propose_only,id_list=id_list,fuzzy_match=fuzzy_match)
 
     match_for_scan_type(from_app_guid=results_from_app_id, to_app_guid=results_to_app_id, dry_run=dry_run, 
         scan_type='DYNAMIC',propose_only=propose_only,id_list=id_list)
