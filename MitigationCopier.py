@@ -5,7 +5,7 @@ import json
 import datetime
 
 import anticrlf
-from veracode_api_py.api import VeracodeAPI as vapi, Applications, Findings
+from veracode_api_py.api import VeracodeAPI as vapi, Applications, Findings, Sandboxes
 from veracode_api_py.constants import Constants
 
 log = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ def creds_expire_days_warning():
     delta = exp - datetime.datetime.now().astimezone() #we get a datetime with timezone...
     if (delta.days < 7):
         print('These API credentials expire ', creds['expiration_ts'])
-        
+
 def prompt_for_app(prompt_text):
     appguid = ""
     app_name_search = input(prompt_text)
@@ -61,7 +61,7 @@ def get_findings_by_type(app_guid, scan_type='STATIC', sandbox_guid=None):
         findings = Findings().get_findings(app_guid,scantype=scan_type,annot='TRUE',sandbox=sandbox_guid)
     elif scan_type == 'DYNAMIC':
         findings = Findings().get_findings(app_guid,scantype=scan_type,annot='TRUE')
-        
+
     return findings
 
 def logprint(log_msg):
@@ -72,7 +72,7 @@ def filter_approved(findings,id_list):
     if id_list is not None:
         log.info('Only copying the following findings provided in id_list: {}'.format(id_list))
         findings = [f for f in findings if f['issue_id'] in id_list]
-    
+
     return [f for f in findings if (f['finding_status']['resolution_status'] == 'APPROVED')]
 
 def format_file_path(file_path):
@@ -81,7 +81,7 @@ def format_file_path(file_path):
     # teamcity/buildagent/work/d2a72efd0db7f7d7
     if file_path is None:
         return ''
-    
+
     suffix_length = len(file_path)
 
     buildagent_loc = file_path.find('teamcity/buildagent/work/')
@@ -156,22 +156,25 @@ def set_in_memory_flaw_to_approved(findings_to,to_id):
         if all (k in finding for k in ("id", "finding")):
             if (finding["id"] == to_id):
                 finding['finding']['finding_status']['resolution_status'] = 'APPROVED'
+def get_formatted_app_name(app_guid, sandbox_guid):
+    app_name = get_application_name(app_guid)
+    return format_application_name(app_guid,app_name,sandbox_guid)
 
-def match_for_scan_type(from_app_guid, to_app_guid, dry_run, scan_type='STATIC',from_sandbox_guid=None, 
-        to_sandbox_guid=None, propose_only=False, id_list=[], fuzzy_match=False):
-    results_from_app_name = get_application_name(from_app_guid)
-    formatted_from = format_application_name(from_app_guid,results_from_app_name,from_sandbox_guid)
-    logprint('Getting {} findings for {}'.format(scan_type.lower(),formatted_from))
+def get_findings_from(from_app_guid, scan_type, from_sandbox_guid=None):
+    formatted_app_name = get_formatted_app_name(from_app_guid, from_sandbox_guid)
+    logprint('Getting {} findings for {}'.format(scan_type.lower(),formatted_app_name))
     findings_from = get_findings_by_type(from_app_guid,scan_type=scan_type, sandbox_guid=from_sandbox_guid)
     count_from = len(findings_from)
-    logprint('Found {} {} findings in "from" {}'.format(count_from,scan_type.lower(),formatted_from))
-    if count_from == 0:
-        return 0 # no source findings to copy!   
-   
-    findings_from_approved = filter_approved(findings_from,id_list)
+    logprint('Found {} {} findings in "from" {}'.format(count_from,scan_type.lower(),formatted_app_name))
+    return findings_from
 
-    if len(findings_from_approved) == 0:
-        logprint('No approved findings in "from" {}. Exiting.'.format(formatted_from))
+def match_for_scan_type(findings_from, from_app_guid, to_app_guid, dry_run, scan_type='STATIC',from_sandbox_guid=None,
+        to_sandbox_guid=None, propose_only=False, id_list=[], fuzzy_match=False):
+    if len(findings_from) == 0:
+        return 0 # no source findings to copy!
+
+    if len(filter_approved(findings_from,id_list)) == 0:
+        logprint('No approved findings in "from" {}. Exiting.'.format())
         return 0
 
     results_to_app_name = get_application_name(to_app_guid)
@@ -186,17 +189,18 @@ def match_for_scan_type(from_app_guid, to_app_guid, dry_run, scan_type='STATIC',
 
     # CREATE LIST OF UNIQUE VALUES FOR BUILD COPYING TO
     copy_array_to = create_match_format_policy( app_guid=to_app_guid, sandbox_guid=to_sandbox_guid, policy_findings=findings_to,finding_type=scan_type)
-    
+
     # We'll return how many mitigations we applied
     counter = 0
 
+    formatted_from = get_formatted_app_name(from_app_guid, from_sandbox_guid)
     # look for a match for each finding in the TO list and apply mitigations of the matching flaw, if found
     for this_to_finding in findings_to:
         to_id = this_to_finding['issue_id']
 
         if this_to_finding['finding_status']['resolution_status'] == 'APPROVED':
             logprint ('Flaw ID {} in {} already has an accepted mitigation; skipped.'.format(to_id,formatted_to))
-            continue 
+            continue
 
         match = Findings().match(this_to_finding,findings_from,approved_matches_only=True,allow_fuzzy_match=fuzzy_match)
 
@@ -222,6 +226,34 @@ def match_for_scan_type(from_app_guid, to_app_guid, dry_run, scan_type='STATIC',
 
     print('[*] Updated {} flaws in {}. See log file for details.'.format(str(counter),formatted_to))
 
+def get_exact_name_match(application_name, app_candidates):
+    for application_candidate in app_candidates:
+        if application_candidate["profile"]["name"] == application_name:
+            return application_candidate["guid"]
+    print("Unable to find application called " + application_name)
+    return None
+
+def get_application_by_name(application_name):
+    app_candidates = Applications().get_by_name(application_name)
+    if len(app_candidates) == 0:
+        print("Unable to find application called " + application_name)
+        return None
+    elif len(app_candidates) > 1:
+        return get_exact_name_match(application_name, app_candidates)
+    else:
+        return app_candidates[0].get('guid')
+
+def get_applications_by_name(application_names):
+    application_ids = []
+    names_as_list = [build.strip() for build in application_names.split(", ")]
+
+    for application_name in names_as_list:
+        application_id = get_application_by_name(application_name)
+        if application_id is not None:
+            application_ids.append(application_id)
+
+    return application_ids
+
 def main():
     parser = argparse.ArgumentParser(
         description='This script looks at the results set of the FROM APP. For any flaws that have an '
@@ -231,6 +263,10 @@ def main():
     parser.add_argument('-fs', '--fromsandbox', help='Sandbox GUID to copy from (optional)')
     parser.add_argument('-t', '--toapp', help='App GUID to copy to')
     parser.add_argument('-ts', '--tosandbox', help="Sandbox GUID to copy to (optional)")
+
+    parser.add_argument('-fn', '--fromappname', help='Application Name to copy from')
+    parser.add_argument('-tn', '--toappnames', help='Comma-delimited list of Application Names to copy to')
+
     parser.add_argument('-p', '--prompt', action='store_true', help='Specify to prompt for the applications to copy from and to.')
     parser.add_argument('-d', '--dry_run', action='store_true', help="Log matched flaws instead of applying mitigations")
     parser.add_argument('-l', '--legacy_ids',action='store_true', help='Use legacy Veracode app IDs instead of GUIDs')
@@ -248,9 +284,13 @@ def main():
 
     # SET VARIABLES FOR FROM AND TO APPS
     results_from_app_id = args.fromapp
-    results_to_app_id = args.toapp
+    results_to_app_id = [args.toapp]
     results_from_sandbox_id = args.fromsandbox
     results_to_sandbox_id = args.tosandbox
+
+    results_from_app_name = args.fromappname
+    results_to_app_names = args.toappnames
+
     prompt = args.prompt
     dry_run = args.dry_run
     legacy_ids = args.legacy_ids
@@ -260,10 +300,15 @@ def main():
 
     if prompt:
         results_from_app_id = prompt_for_app("Enter the application name to copy mitigations from: ")
-        results_to_app_id = prompt_for_app("Enter the application name to copy mitigations to: ")
+        results_to_app_id = [prompt_for_app("Enter the application name to copy mitigations to: ")]
         # ignore Sandbox arguments in the Prompt case
         results_from_sandbox_id = None
         results_to_sandbox_id = None
+    else:
+        if results_from_app_name:
+            results_from_app_id = get_applications_by_name(results_from_app_name)[0]
+        if results_to_app_names:
+            results_to_app_id = get_applications_by_name(results_to_app_names)
 
     if results_from_app_id in ( None, '' ) or results_to_app_id in ( None, '' ):
         print('You must provide an application to copy mitigations to and from.')
@@ -276,12 +321,16 @@ def main():
         results_to_app_id = results_to
 
     # get static findings and apply mitigations
+    all_static_findings = get_findings_from(from_app_guid=results_from_app_id, scan_type='STATIC',
+        from_sandbox_guid=results_from_sandbox_id)
+    all_dynamic_findings = get_findings_from(from_app_guid=results_from_app_id, scan_type='DYNAMIC',
+        from_sandbox_guid=results_from_sandbox_id)
 
-    match_for_scan_type(from_app_guid=results_from_app_id, to_app_guid=results_to_app_id, dry_run=dry_run, scan_type='STATIC',
-        from_sandbox_guid=results_from_sandbox_id,to_sandbox_guid=results_to_sandbox_id,propose_only=propose_only,id_list=id_list,fuzzy_match=fuzzy_match)
-
-    match_for_scan_type(from_app_guid=results_from_app_id, to_app_guid=results_to_app_id, dry_run=dry_run, 
-        scan_type='DYNAMIC',propose_only=propose_only,id_list=id_list)
+    for to_app_id in results_to_app_id:
+        match_for_scan_type(all_static_findings, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run, scan_type='STATIC',
+            from_sandbox_guid=results_from_sandbox_id,to_sandbox_guid=results_to_sandbox_id,propose_only=propose_only,id_list=id_list,fuzzy_match=fuzzy_match)
+        match_for_scan_type(all_dynamic_findings, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run,
+            scan_type='DYNAMIC',propose_only=propose_only,id_list=id_list)
 
 if __name__ == '__main__':
     main()
