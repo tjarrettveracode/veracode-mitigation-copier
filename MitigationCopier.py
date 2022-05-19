@@ -5,7 +5,7 @@ import json
 import datetime
 
 import anticrlf
-from veracode_api_py.api import VeracodeAPI as vapi, Applications, Findings, Sandboxes
+from veracode_api_py.api import VeracodeAPI as vapi, Applications, Findings
 from veracode_api_py.constants import Constants
 
 log = logging.getLogger(__name__)
@@ -230,20 +230,20 @@ def get_exact_name_match(application_name, app_candidates):
     for application_candidate in app_candidates:
         if application_candidate["profile"]["name"] == application_name:
             return application_candidate["guid"]
-    print("Unable to find application called " + application_name)
+    print("Unable to find application named " + application_name)
     return None
 
 def get_application_by_name(application_name):
     app_candidates = Applications().get_by_name(application_name)
     if len(app_candidates) == 0:
-        print("Unable to find application called " + application_name)
+        print("Unable to find application named " + application_name)
         return None
     elif len(app_candidates) > 1:
         return get_exact_name_match(application_name, app_candidates)
     else:
         return app_candidates[0].get('guid')
 
-def get_applications_by_name(application_names):
+def get_application_guids_by_name(application_names):
     application_ids = []
     names_as_list = [build.strip() for build in application_names.split(", ")]
 
@@ -284,7 +284,7 @@ def main():
 
     # SET VARIABLES FOR FROM AND TO APPS
     results_from_app_id = args.fromapp
-    results_to_app_id = [args.toapp]
+    results_to_app_ids = [args.toapp]
     results_from_sandbox_id = args.fromsandbox
     results_to_sandbox_id = args.tosandbox
 
@@ -300,25 +300,25 @@ def main():
 
     if prompt:
         results_from_app_id = prompt_for_app("Enter the application name to copy mitigations from: ")
-        results_to_app_id = [prompt_for_app("Enter the application name to copy mitigations to: ")]
+        results_to_app_ids = [prompt_for_app("Enter the application name to copy mitigations to: ")]
         # ignore Sandbox arguments in the Prompt case
         results_from_sandbox_id = None
         results_to_sandbox_id = None
     else:
         if results_from_app_name:
-            results_from_app_id = get_applications_by_name(results_from_app_name)[0]
+            results_from_app_id = get_application_guids_by_name(results_from_app_name)[0]
         if results_to_app_names:
-            results_to_app_id = get_applications_by_name(results_to_app_names)
+            results_to_app_ids = get_application_guids_by_name(results_to_app_names)
 
-    if results_from_app_id in ( None, '' ) or results_to_app_id in ( None, '' ):
+    if results_from_app_id in ( None, '' ) or results_to_app_ids in ( None, '' ):
         print('You must provide an application to copy mitigations to and from.')
         return
 
     if legacy_ids:
         results_from = get_app_guid_from_legacy_id(results_from_app_id)
-        results_to = get_app_guid_from_legacy_id(results_to_app_id)
+        results_to = get_app_guid_from_legacy_id(results_to_app_ids)
         results_from_app_id = results_from
-        results_to_app_id = results_to
+        results_to_app_ids = results_to
 
     # get static findings and apply mitigations
     all_static_findings = get_findings_from(from_app_guid=results_from_app_id, scan_type='STATIC',
@@ -326,7 +326,7 @@ def main():
     all_dynamic_findings = get_findings_from(from_app_guid=results_from_app_id, scan_type='DYNAMIC',
         from_sandbox_guid=results_from_sandbox_id)
 
-    for to_app_id in results_to_app_id:
+    for to_app_id in results_to_app_ids:
         match_for_scan_type(all_static_findings, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run, scan_type='STATIC',
             from_sandbox_guid=results_from_sandbox_id,to_sandbox_guid=results_to_sandbox_id,propose_only=propose_only,id_list=id_list,fuzzy_match=fuzzy_match)
         match_for_scan_type(all_dynamic_findings, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run,
