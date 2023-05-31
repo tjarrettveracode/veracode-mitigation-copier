@@ -213,7 +213,7 @@ def match_for_scan_type(from_app_guid, to_app_guid, dry_run, scan_type='STATIC',
 
         for mitigation_action in reversed(mitigation_list): #findings API puts most recent action first
             proposal_action = mitigation_action['action']
-            proposal_comment = '[COPIED FROM APP {}] {}'.format(from_app_guid, mitigation_action['comment'])
+            proposal_comment = '(COPIED FROM APP {}) {}'.format(from_app_guid, mitigation_action['comment'])
             if not(dry_run):
                 update_mitigation_info_rest(to_app_guid, to_id, proposal_action, proposal_comment, to_sandbox_guid, propose_only)
 
