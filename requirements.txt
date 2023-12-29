@@ -1,3 +1,2 @@
-veracode-api-py>=0.9.18
+veracode-api-py>=0.9.43
 logging-formatter-anticrlf>=1.2
-Pygments == 2.7.4

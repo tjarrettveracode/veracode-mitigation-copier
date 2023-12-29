@@ -6,7 +6,7 @@ Copies mitigations from one Veracode profile to another if it's the same flaw ba
 - **Static (no debug information)**: `cweid`, `type`, `procedure` and `relative_location`
 - **Dynamic**: `cweid`, `path` and `vulnerable_parameter`
 
-The script will copy all proposed and accepted mitigations for the flaw. The script will skip a flaw in the `copy_to` build if it already has an accepted mitigation.
+The script will copy all accepted mitigations for the flaw. The script will skip a flaw in the `copy_to` build if it already has an accepted mitigation.
 
 *Note*: This script requires Python 3!
 
