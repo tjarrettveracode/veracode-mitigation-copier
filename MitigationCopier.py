@@ -173,8 +173,11 @@ def match_for_scan_type(findings_from, from_app_guid, to_app_guid, dry_run, scan
     if len(findings_from) == 0:
         return 0 # no source findings to copy!
 
+    from_app_name = get_application_name(from_app_guid)
+    formatted_from = format_application_name(from_app_guid,from_app_name,from_sandbox_guid)
+            
     if len(filter_approved(findings_from,id_list)) == 0:
-        logprint('No approved findings in "from" {}. Exiting.'.format())
+        logprint('No approved findings in "from" {}. Exiting.'.format(formatted_from))
         return 0
 
     results_to_app_name = get_application_name(to_app_guid)
