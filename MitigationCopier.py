@@ -1,8 +1,9 @@
-import sys
 import argparse
 import logging
-import json
 import datetime
+import logging
+import requests
+import http.client as http_client
 
 import anticrlf
 from veracode_api_py.api import VeracodeAPI as vapi, Applications, Findings
@@ -10,12 +11,20 @@ from veracode_api_py.constants import Constants
 
 log = logging.getLogger(__name__)
 
-def setup_logger():
+def setup_logger(debug):
     handler = logging.FileHandler('MitigationCopier.log', encoding='utf8')
     handler.setFormatter(anticrlf.LogFormatter('%(asctime)s - %(levelname)s - %(funcName)s - %(message)s'))
     log = logging.getLogger(__name__)
     log.addHandler(handler)
-    log.setLevel(logging.INFO)
+    if debug:
+        http_client.HTTPConnection.debuglevel = 1
+        log.setLevel(logging.DEBUG)
+        requests_log = logging.getLogger("requests.packages.urllib3")
+        requests_log.setLevel(logging.DEBUG)
+        requests_log.propagate = True
+    else:
+        log.setLevel(logging.INFO)
+
 
 def creds_expire_days_warning():
     creds = vapi().get_creds()
@@ -237,9 +246,10 @@ def main():
     parser.add_argument('-po', '--propose_only',action='store_true', help='Only propose mitigations, do not approve them')
     parser.add_argument('-i','--id_list',nargs='*', help='Only copy mitigations for the flaws in the id_list')
     parser.add_argument('-fm','--fuzzy_match',action='store_true', help='Look within a range of line numbers for a matching flaw')
+    parser.add_argument('-D', '--debug',action='store_true',help="Show debug information")
     args = parser.parse_args()
 
-    setup_logger()
+    setup_logger(args.debug)
 
     logprint('======== beginning MitigationCopier.py run ========')
 
