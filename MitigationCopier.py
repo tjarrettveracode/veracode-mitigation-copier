@@ -128,31 +128,34 @@ def format_application_name(guid, app_name, sandbox_guid=None):
         formatted_name = 'sandbox {} in application {} (guid: {})'.format(sandbox_guid,app_name,guid)
     return formatted_name
 
-def submit_sca_mitigation(app_guid, action, comment, component_id, cve_name):
+def submit_sca_mitigation(app_guid, action, comment, component_id, annotation_type, issue_id):
     try:
-        SCAApplications().add_annotation(app_guid=app_guid, action=action, comment=comment, annotation_type="VULNERABILITY",
-                                        component_id=component_id,cve_name=cve_name)
-        log.info('Updated mitigation information to {} for {} in component id {} in {}'.format(action, component_id, cve_name, app_guid))
+        if annotation_type == "vulnerability":
+            SCAApplications().add_annotation(app_guid=app_guid, action=action, comment=comment, annotation_type="VULNERABILITY",
+                                             component_id=component_id,cve_name=issue_id)
+        else:
+            SCAApplications().add_annotation(app_guid=app_guid, action=action, comment=comment, annotation_type="LICENSE",
+                                             component_id=component_id,license_id=issue_id)
+        log.info(f'Updated {annotation_type} mitigation information to {action} for component {component_id} and issue_id {issue_id} in application {app_guid}')
         return True
     except:
-        log.error('Unable to submit mitigation for {} in component {} for application {}'.format(component_id, cve_name, app_guid))
+        log.error(f'Unable to submit {annotation_type} mitigation information to {action} for component {component_id} and issue_id {issue_id} in application {app_guid}')
     return False
 
-def update_sca_mitigation_info_rest(app_guid, action, comment, component_id, cve_name, propose_only):
+def update_sca_mitigation_info_rest(app_guid, action, comment, annotation_type, component_id, issue_id, propose_only):
     # validate length of comment argument, gracefully handle overage
     if len(comment) > 2048:
         comment = comment[0:2048]
 
     if action == 'CONFORMS' or action == 'DEVIATES':
-        log.warning('Cannot copy {} mitigation for component {} and cve {} in {}'.format(action,component_id,cve_name,app_guid))
+        log.warning(f'propose_only set to True; Cannot copy {action} mitigation for component {component_id} and issue_id {issue_id} in {app_guid}')
         return
-    elif action == 'APPROVED':
+    elif action == 'APPROVE':
         if propose_only:
-            log.info('propose_only set to True; skipping applying approval for component {} and cve {} for application {}'.format(component_id,cve_name, app_guid))
+            log.warning(f'propose_only set to True; skipping applying approval for component {component_id} and issue_id {issue_id} in {app_guid}')
             return
-        action = Constants.ANNOT_TYPE[action]
     
-    return submit_sca_mitigation(app_guid, action, comment, component_id, cve_name)
+    return submit_sca_mitigation(app_guid, action, comment, component_id, annotation_type, issue_id)
 
 
 def update_mitigation_info_rest(to_app_guid,flaw_id,action,comment,sandbox_guid=None, propose_only=False):
@@ -184,11 +187,11 @@ def set_in_memory_flaw_to_approved(findings_to,to_id):
             if (finding["id"] == to_id):
                 finding['finding']['finding_status']['resolution_status'] = 'APPROVED'
 
-def match_sca(from_app_guid, to_app_guid, dry_run,propose_only):
+def match_sca(from_app_guid, to_app_guid, dry_run, annotation_type, propose_only):
     results_from_app_name = get_application_name(from_app_guid)
     formatted_from = format_application_name(from_app_guid,results_from_app_name)
     logprint('Getting SCA findings for {}'.format(formatted_from))
-    findings_from_approved = SCAApplications().get_annotations(app_guid=from_app_guid, annotation_type="VULNERABILITY")
+    findings_from_approved = SCAApplications().get_annotations(app_guid=from_app_guid, annotation_type=annotation_type.upper())
     if findings_from_approved:
         findings_from_approved = findings_from_approved['approved_annotations']
 
@@ -206,39 +209,22 @@ def match_sca(from_app_guid, to_app_guid, dry_run,propose_only):
     
     for sca_finding in findings_from_approved:
         component_file_name = sca_finding['component']['filename']
-        cve_name = sca_finding['vulnerability']['cve_name']
+        component_id = sca_finding['component']['id']
+        if annotation_type == "license":
+            issue_id = sca_finding['license']['license_id']
+        else:
+            issue_id = sca_finding['vulnerability']['cve_name']
 
-        matches = Findings().get_findings(to_app_guid,'SCA',annot=False,request_params={'cve': cve_name})
-
-        if matches == None or len(matches) == 0:
-            log.info('No approved match found for finding {} in {}'.format(component_file_name,formatted_from))
-            continue
-
-        match = None
-        for potential_match in matches:
-            if potential_match['finding_details']['component_filename'] == component_file_name:
-                match = potential_match
-                break
-
-        if match == None:
-            log.info('No approved match found for component {} and cve {} in {}'.format(component_file_name,cve_name,formatted_from))
-            continue
-
-        component_id = match['finding_details']['component_id']
-
-        log.info('Found match for component {} and cve {} in {} - component id identified as {}'.format(component_file_name,cve_name,formatted_from,component_id))
-        if match['finding_status']['resolution_status'] == 'APPROVED':
-            logprint ('Found match already has an accepted mitigation; skipped.')
-            continue 
-        
+        # might need to add some logic to skip already mitigated findings
+                    
         mitigation_list = sca_finding['history']
-        logprint ('Applying {} annotations for {} from {} in {}...'.format(len(mitigation_list),cve_name,component_file_name,formatted_to))
+        logprint (f'Applying {len(mitigation_list)} {annotation_type} annotations to {component_file_name} with issue id {issue_id} in {formatted_to}...')
 
-        for mitigation_action in reversed(mitigation_list): #SCA mitigations API puts most recent action first
+        for mitigation_action in reversed(mitigation_list): # SCA mitigations API puts most recent action first
             proposal_action = mitigation_action['annotation_action']
-            proposal_comment = 'COPIED {} MITIGATION FROM APP {} AT {}'.format(from_app_guid, mitigation_action['annotation_action'], datetime.datetime.now())
+            proposal_comment = f'COPIED {proposal_action} MITIGATION FROM APP {from_app_guid} AT {datetime.datetime.now()}'
             if not(dry_run):
-                if not update_sca_mitigation_info_rest(to_app_guid, proposal_action, proposal_comment, component_id, cve_name, propose_only):
+                if not update_sca_mitigation_info_rest(to_app_guid, proposal_action, proposal_comment, annotation_type, component_id, issue_id, propose_only):
                     counter-=1
                     break
 
@@ -375,7 +361,8 @@ def main():
     #    scan_type='DYNAMIC',propose_only=propose_only,id_list=id_list)
     
     if copy_sca:
-        match_sca(from_app_guid=results_from_app_id, to_app_guid=results_to_app_id, dry_run=dry_run,propose_only=propose_only)
+        match_sca(from_app_guid=results_from_app_id, to_app_guid=results_to_app_id, dry_run=dry_run,annotation_type="vulnerability",propose_only=propose_only)
+        match_sca(from_app_guid=results_from_app_id, to_app_guid=results_to_app_id, dry_run=dry_run,annotation_type="license",propose_only=propose_only)
 
 if __name__ == '__main__':
     main()
