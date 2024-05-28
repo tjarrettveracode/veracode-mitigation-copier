@@ -141,13 +141,21 @@ def update_mitigation_info_rest(to_app_guid,flaw_id,action,comment,sandbox_guid=
             log.info('propose_only set to True; skipping applying approval for flaw_id {}'.format(flaw_id))
             return
         action = Constants.ANNOT_TYPE[action]
+    elif action == 'CUSTOMCLEANSERPROPOSED' or action == 'CUSTOMCLEANSERUSERCOMMENT':
+        log.warning(f"""Cannot copy '{action}' mitigation for Flaw ID {flaw_id} in {to_app_guid}""")
+        return
+    
     flaw_id_list = [flaw_id]
-    if sandbox_guid==None:
-        Findings().add_annotation(to_app_guid,flaw_id_list,comment,action)
-    else:
-        Findings().add_annotation(to_app_guid,flaw_id_list,comment,action,sandbox=sandbox_guid)
-    log.info(
-        'Updated mitigation information to {} for Flaw ID {} in {}'.format(action, str(flaw_id_list), to_app_guid))
+    try:
+        if sandbox_guid==None:
+            Findings().add_annotation(to_app_guid,flaw_id_list,comment,action)
+        else:
+            Findings().add_annotation(to_app_guid,flaw_id_list,comment,action,sandbox=sandbox_guid)
+        log.info(
+            'Updated mitigation information to {} for Flaw ID {} in {}'.format(action, str(flaw_id_list), to_app_guid))
+    except requests.exceptions.RequestException as e:
+        logprint(f"""WARNING: Unable to apply annotation '{action}' for Flaw ID {flaw_id_list} in {to_app_guid}""")
+        log.exception('Ignoring request exception')
 
 def set_in_memory_flaw_to_approved(findings_to,to_id):
     # use this function to update the status of target findings in memory, so that, if it is found
