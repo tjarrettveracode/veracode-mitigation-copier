@@ -48,7 +48,7 @@ Arguments supported include:
 - `-t`, `--toapp` - Application GUID that you want to copy mitigations to.
 - `-tn`, `--toappnames` - (optional) - Comma-delimited list of Application Names to copy mitigations to. Overrides `--toapp`.
 - `-ts`, `--tosandbox` (optional) - Sandbox GUID that you want to copy mitigations to. Ignored if `--prompt` is set.
-- `-tsn`, `--tosandboxname` (optional) - Comma-delimited list of Sandbox Names to copy to - should be in the same order as `--toappnames`.
+- `-tsn`, `--tosandboxnames` (optional) - Comma-delimited list of Sandbox Names to copy to - should be in the same order as `--toappnames`.
 - `-st`, `--scan_types` (optional) - Comma-delimited list of scan types to copy mitigations (default: SAST, DAST).
 - `-sit`, `--sca_import_type` (optional) - Comma-delimited list of types of SCA issues to import (default: licenses, vulnerabilities).
 - `-p`, `--prompt` - Specify to prompt for the applications to copy from and to.
