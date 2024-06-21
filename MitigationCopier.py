@@ -150,8 +150,8 @@ def update_sca_mitigation_info_rest(app_guid, action, comment, annotation_type, 
     if len(comment) > 2048:
         comment = comment[0:2048]
 
-    if action == 'CONFORMS' or action == 'DEVIATES':
-        log.warning(f'propose_only set to True; Cannot copy {action} mitigation for component {component_id} and issue_id {issue_id} in {app_guid}')
+    if not action in ALLOWED_ACTIONS:
+        log.warning(f'Cannot copy {action} mitigation for component {component_id} and issue_id {issue_id} in {app_guid}')
         return
     elif action == 'APPROVE':
         if propose_only:
@@ -188,13 +188,11 @@ def set_in_memory_flaw_to_approved(findings_to,to_id):
         if all (k in finding for k in ("id", "finding")):
             if (finding["id"] == to_id):
                 finding['finding']['finding_status']['resolution_status'] = 'APPROVED'
-def match_sca(from_app_guid, to_app_guid, dry_run, annotation_type, propose_only):
+
+def match_sca(findings_from_approved, from_app_guid, to_app_guid, dry_run, annotation_type, propose_only):
     results_from_app_name = get_application_name(from_app_guid)
     formatted_from = format_application_name(from_app_guid,results_from_app_name)
-    logprint('Getting SCA findings for {}'.format(formatted_from))
-    findings_from_approved = SCAApplications().get_annotations(app_guid=from_app_guid, annotation_type=annotation_type.upper())
-    if findings_from_approved:
-        findings_from_approved = findings_from_approved['approved_annotations']
+    logprint('Getting SCA findings for {}'.format(formatted_from))    
 
     count_from = len(findings_from_approved)
     if count_from == 0:
@@ -360,6 +358,12 @@ def get_application_guids_by_name(application_names):
 
     return application_ids
 
+def get_sca_findings_for(from_app_guid, annotation_type):
+    findings_from_approved = SCAApplications().get_annotations(app_guid=from_app_guid, annotation_type=annotation_type.upper())
+    if findings_from_approved:
+        return findings_from_approved['approved_annotations']
+    return []
+
 def main():
     parser = argparse.ArgumentParser(
         description='This script looks at the results set of the FROM APP. For any flaws that have an '
@@ -376,13 +380,15 @@ def main():
     parser.add_argument('-tn', '--toappnames', help='Comma-delimited list of Application Names to copy to')
     parser.add_argument('-tsn', '--tosandboxnames', help='Comma-delimited list of Sandbox Names to copy to - should be in the same order as --toappnames')
 
+    parser.add_argument('-st','--scan_types', help='Comma-delimited list of scan types to copy mitigations (default: SAST, DAST)')
+    parser.add_argument('-sit','--sca_import_type', help='Comma-delimited list of types of SCA issues to import (default: licenses, vulnerabilities)')
+
     parser.add_argument('-p', '--prompt', action='store_true', help='Specify to prompt for the applications to copy from and to.')
     parser.add_argument('-d', '--dry_run', action='store_true', help="Log matched flaws instead of applying mitigations")
     parser.add_argument('-l', '--legacy_ids',action='store_true', help='Use legacy Veracode app IDs instead of GUIDs')
     parser.add_argument('-po', '--propose_only',action='store_true', help='Only propose mitigations, do not approve them')
     parser.add_argument('-i','--id_list',nargs='*', help='Only copy mitigations for the flaws in the id_list')
-    parser.add_argument('-fm','--fuzzy_match',action='store_true', help='Look within a range of line numbers for a matching flaw')
-    parser.add_argument('-cs','--copy_sca',action='store_true', help='Also copy SCA findings (not compatible with --id_list or importing to and from sandboxes)')
+    parser.add_argument('-fm','--fuzzy_match',action='store_true', help='Look within a range of line numbers for a matching flaw')    
     args = parser.parse_args()
 
     setup_logger()
@@ -402,6 +408,8 @@ def main():
     results_from_sandbox_name = args.fromsandboxname
     results_to_app_names = args.toappnames
     results_to_sandbox_names = args.tosandboxnames
+    scan_types = args.scan_types
+    sca_import_type = args.sca_import_type
 
     prompt = args.prompt
     dry_run = args.dry_run
@@ -409,7 +417,6 @@ def main():
     propose_only = args.propose_only
     id_list = args.id_list
     fuzzy_match = args.fuzzy_match
-    copy_sca = args.copy_sca
 
     if prompt:
         results_from_app_id = prompt_for_app("Enter the application name to copy mitigations from: ")
@@ -427,6 +434,33 @@ def main():
         if results_to_sandbox_names:
             results_to_sandbox_ids = get_sandbox_guids_by_name(results_to_app_ids, results_to_sandbox_names)
 
+    is_sast = False
+    is_dast = False
+    is_sca = False
+    is_sca_vulnerabilities = False
+    is_sca_licences = False
+    if scan_types:
+        scan_types = scan_types.lower()
+        is_sast = 'sast' in scan_types
+        is_dast = 'dast' in scan_types
+        is_sca = 'sca' in scan_types
+        if is_sca:
+            if sca_import_type:
+                sca_import_type = sca_import_type.lower()
+                is_sca_vulnerabilities = 'vulnerabilit' in sca_import_type
+                is_sca_licences = 'license' in sca_import_type
+            else:
+                is_sca_vulnerabilities = True
+                is_sca_licences = True
+        if not is_dast and not is_sast and not is_sca_licences and not is_sca_licences:
+            print('No valid scan types were provided.')
+            print('Valid scan_types are: DAST, SAST, SCA.')
+            print('Valid sca_import_type are: licenses, vulnerabilities.')
+            return        
+    else:
+        is_sast = True
+        is_dast = True
+
     if results_from_app_id in ( None, '' ) or results_to_app_ids in ( None, '' ):
         print('You must provide an application to copy mitigations to and from.')
         return
@@ -438,19 +472,28 @@ def main():
         results_to_app_ids = results_to
 
     # get static findings and apply mitigations
-    all_static_findings = get_findings_from(from_app_guid=results_from_app_id, scan_type='STATIC',
-        from_sandbox_guid=results_from_sandbox_id)
-    all_dynamic_findings = get_findings_from(from_app_guid=results_from_app_id, scan_type='DYNAMIC',
-        from_sandbox_guid=results_from_sandbox_id)
+    if is_sast:
+        all_static_findings = get_findings_from(from_app_guid=results_from_app_id, scan_type='STATIC',
+            from_sandbox_guid=results_from_sandbox_id)
+    if is_dast:
+        all_dynamic_findings = get_findings_from(from_app_guid=results_from_app_id, scan_type='DYNAMIC',
+            from_sandbox_guid=results_from_sandbox_id)
+    if is_sca_vulnerabilities:
+        all_sca_vulnerabilities = get_sca_findings_for(from_app_guid=results_from_app_id, annotation_type="vulnerability")
+    if is_sca_licences:
+        all_sca_licenses = get_sca_findings_for(from_app_guid=results_from_app_id, annotation_type="license")
 
     for index, to_app_id in enumerate(results_to_app_ids):
-        match_for_scan_type(all_static_findings, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run, scan_type='STATIC',
-            from_sandbox_guid=results_from_sandbox_id,to_sandbox_guid=results_to_sandbox_ids[index] if results_to_sandbox_ids else None,propose_only=propose_only,id_list=id_list,fuzzy_match=fuzzy_match)
-        match_for_scan_type(all_dynamic_findings, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run,
-            scan_type='DYNAMIC',propose_only=propose_only,id_list=id_list)
-        if copy_sca:
-            match_sca(from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run,annotation_type="vulnerability",propose_only=propose_only)
-            match_sca(from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run,annotation_type="license",propose_only=propose_only)
+        if is_sast:
+            match_for_scan_type(all_static_findings, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run, scan_type='STATIC',
+                from_sandbox_guid=results_from_sandbox_id,to_sandbox_guid=results_to_sandbox_ids[index] if results_to_sandbox_ids else None,propose_only=propose_only,id_list=id_list,fuzzy_match=fuzzy_match)
+        if is_dast:
+            match_for_scan_type(all_dynamic_findings, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run,
+                scan_type='DYNAMIC',propose_only=propose_only,id_list=id_list)
+        if is_sca_vulnerabilities:
+            match_sca(all_sca_vulnerabilities, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run,annotation_type="vulnerability",propose_only=propose_only)
+        if is_sca_licences:
+            match_sca(all_sca_licenses, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run,annotation_type="license",propose_only=propose_only)
 
 if __name__ == '__main__':
     main()
