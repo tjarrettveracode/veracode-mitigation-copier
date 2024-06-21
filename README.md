@@ -42,9 +42,15 @@ Otherwise you will need to set environment variables:
 Arguments supported include:
 
 - `-f`, `--fromapp` - Application GUID that you want to copy mitigations from.
+- `-fn`, `--fromappname` - (optional) - Application Name that you want to copy mitigations from. Overrides `--fromapp`.
+- `fsn`, `--fromsandboxname` (optional) - Sandbox Name to copy from.
 - `-fs`, `--fromsandbox` (optional) - Sandbox GUID that you want to copy mitigations from. Ignored if `--prompt` is set.
 - `-t`, `--toapp` - Application GUID that you want to copy mitigations to.
+- `-tn`, `--toappnames` - (optional) - Comma-delimited list of Application Names to copy mitigations to. Overrides `--toapp`.
 - `-ts`, `--tosandbox` (optional) - Sandbox GUID that you want to copy mitigations to. Ignored if `--prompt` is set.
+- `-tsn`, `--tosandboxnames` (optional) - Comma-delimited list of Sandbox Names to copy to - should be in the same order as `--toappnames`.
+- `-st`, `--scan_types` (optional) - Comma-delimited list of scan types to copy mitigations (default: SAST, DAST).
+- `-sit`, `--sca_import_type` (optional) - Comma-delimited list of types of SCA issues to import (default: licenses, vulnerabilities).
 - `-p`, `--prompt` - Specify to prompt for the applications to copy from and to.
 - `-d`, `--dry_run` (optional) - Specify to log potential copied mitigations rather than actually mitigating the findings.
 - `-l`, `--legacy_ids` (optional) - Specify to use legacy Veracode application IDs rather than application GUIDs.
@@ -56,6 +62,9 @@ Arguments supported include:
 The script creates a `MitigationCopier.log` file. All actions are logged.
 
 ## Usage examples
+
+### Copy from one application profile to a list of application profiles
+    python MitigationCopier.py -fn "Origin App Name" -tn "Target App 1, Target App 2, Target App 3"
 
 ### Copy from one application profile to another with prompts
 

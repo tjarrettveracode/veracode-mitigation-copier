@@ -1,2 +1,2 @@
-veracode-api-py>=0.9.43
+veracode-api-py>=0.9.46
 logging-formatter-anticrlf>=1.2
