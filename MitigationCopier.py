@@ -10,6 +10,9 @@ from veracode_api_py.constants import Constants
 
 log = logging.getLogger(__name__)
 
+ALLOWED_ACTIONS = ['COMMENT', 'FP', 'APPDESIGN', 'OSENV', 'NETENV', 'REJECTED', 'ACCEPTED', 'LIBRARY', 'ACCEPTRISK', 
+                   'APPROVE', 'REJECT', 'BYENV', 'BYDESIGN', 'LEGAL', 'COMMERCIAL', 'EXPERIMENTAL', 'INTERNAL']
+
 def setup_logger():
     handler = logging.FileHandler('MitigationCopier.log', encoding='utf8')
     handler.setFormatter(anticrlf.LogFormatter('%(asctime)s - %(levelname)s - %(funcName)s - %(message)s'))
@@ -132,11 +135,10 @@ def update_mitigation_info_rest(to_app_guid,flaw_id,action,comment,sandbox_guid=
     # validate length of comment argument, gracefully handle overage
     if len(comment) > 2048:
         comment = comment[0:2048]
-
-    if action == 'CONFORMS' or action == 'DEVIATES':
+    if not action in ALLOWED_ACTIONS:
         log.warning('Cannot copy {} mitigation for Flaw ID {} in {}'.format(action,flaw_id,to_app_guid))
         return
-    elif action == 'APPROVED':
+    elif action == 'APPROVED' or action == 'APPROVE': #Approve is returned by SCA, added for compatibility with the SCA PR
         if propose_only:
             log.info('propose_only set to True; skipping applying approval for flaw_id {}'.format(flaw_id))
             return
