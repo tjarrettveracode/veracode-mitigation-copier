@@ -168,7 +168,7 @@ def update_mitigation_info_rest(to_app_guid,flaw_id,action,comment,sandbox_guid=
     if not action in ALLOWED_ACTIONS:
         log.warning('Cannot copy {} mitigation for Flaw ID {} in {}'.format(action,flaw_id,to_app_guid))
         return
-    elif action == 'APPROVED' or action == 'APPROVE': #Approve is returned by SCA, added for compatibility with the SCA PR
+    elif action == 'APPROVED':
         if propose_only:
             log.info('propose_only set to True; skipping applying approval for flaw_id {}'.format(flaw_id))
             return
