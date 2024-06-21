@@ -5,7 +5,7 @@ import json
 import datetime
 
 import anticrlf
-from veracode_api_py.api import VeracodeAPI as vapi, Applications, Findings, SCAApplications
+from veracode_api_py.api import VeracodeAPI as vapi, Applications, Findings, SCAApplications, Sandboxes
 from veracode_api_py.constants import Constants
 
 log = logging.getLogger(__name__)
@@ -306,7 +306,33 @@ def match_for_scan_type(findings_from, from_app_guid, to_app_guid, dry_run, scan
 
     print('[*] Updated {} flaws in {}. See log file for details.'.format(str(counter),formatted_to))
 
-def get_exact_name_match(application_name, app_candidates):
+def get_exact_sandbox_name_match(sandbox_name, sandbox_candidates):
+    for sandbox_candidate in sandbox_candidates:
+        if sandbox_candidate["name"] == sandbox_name:
+            return sandbox_candidate["guid"]
+    print("Unable to find sandbox named " + sandbox_name)
+    return None
+
+def get_sandbox_by_name(application_id, sandbox_name):
+    sandbox_candidates = Sandboxes().get_all(application_id)
+    if len(sandbox_candidates) == 0:
+        print("No sandboxes found for application " + application_id)
+        return None
+    else:
+        return get_exact_sandbox_name_match(sandbox_name, sandbox_candidates)
+
+def get_sandbox_guids_by_name(results_to_app_ids, results_to_sandbox_names):
+    sandbox_ids = []
+    names_as_list = [sandbox.strip() for sandbox in results_to_sandbox_names.split(", ")]
+
+    for index, sandbox_name in enumerate(names_as_list):
+        sandbox_id = get_sandbox_by_name(results_to_app_ids[index], sandbox_name)
+        if sandbox_id is not None:
+            sandbox_ids.append(sandbox_id)
+
+    return sandbox_ids
+
+def get_exact_application_name_match(application_name, app_candidates):
     for application_candidate in app_candidates:
         if application_candidate["profile"]["name"] == application_name:
             return application_candidate["guid"]
@@ -319,13 +345,13 @@ def get_application_by_name(application_name):
         print("Unable to find application named " + application_name)
         return None
     elif len(app_candidates) > 1:
-        return get_exact_name_match(application_name, app_candidates)
+        return get_exact_application_name_match(application_name, app_candidates)
     else:
         return app_candidates[0].get('guid')
 
 def get_application_guids_by_name(application_names):
     application_ids = []
-    names_as_list = [build.strip() for build in application_names.split(", ")]
+    names_as_list = [application.strip() for application in application_names.split(", ")]
 
     for application_name in names_as_list:
         application_id = get_application_by_name(application_name)
@@ -345,7 +371,10 @@ def main():
     parser.add_argument('-ts', '--tosandbox', help="Sandbox GUID to copy to (optional)")
 
     parser.add_argument('-fn', '--fromappname', help='Application Name to copy from')
+    parser.add_argument('-fsn', '--fromsandboxname', help='Sandbox Name to copy from')
+
     parser.add_argument('-tn', '--toappnames', help='Comma-delimited list of Application Names to copy to')
+    parser.add_argument('-tsn', '--tosandboxnames', help='Comma-delimited list of Sandbox Names to copy to - should be in the same order as --toappnames')
 
     parser.add_argument('-p', '--prompt', action='store_true', help='Specify to prompt for the applications to copy from and to.')
     parser.add_argument('-d', '--dry_run', action='store_true', help="Log matched flaws instead of applying mitigations")
@@ -367,10 +396,12 @@ def main():
     results_from_app_id = args.fromapp
     results_to_app_ids = [args.toapp]
     results_from_sandbox_id = args.fromsandbox
-    results_to_sandbox_id = args.tosandbox
+    results_to_sandbox_ids = args.tosandbox
 
     results_from_app_name = args.fromappname
+    results_from_sandbox_name = args.fromsandboxname
     results_to_app_names = args.toappnames
+    results_to_sandbox_names = args.tosandboxnames
 
     prompt = args.prompt
     dry_run = args.dry_run
@@ -385,12 +416,16 @@ def main():
         results_to_app_ids = [prompt_for_app("Enter the application name to copy mitigations to: ")]
         # ignore Sandbox arguments in the Prompt case
         results_from_sandbox_id = None
-        results_to_sandbox_id = None
+        results_to_sandbox_ids = None
     else:
         if results_from_app_name:
             results_from_app_id = get_application_guids_by_name(results_from_app_name)[0]
+        if results_from_sandbox_name:
+            results_from_sandbox_id = get_sandbox_guids_by_name([results_from_app_id], results_from_sandbox_name)[0]
         if results_to_app_names:
             results_to_app_ids = get_application_guids_by_name(results_to_app_names)
+        if results_to_sandbox_names:
+            results_to_sandbox_ids = get_sandbox_guids_by_name(results_to_app_ids, results_to_sandbox_names)
 
     if results_from_app_id in ( None, '' ) or results_to_app_ids in ( None, '' ):
         print('You must provide an application to copy mitigations to and from.')
@@ -408,9 +443,9 @@ def main():
     all_dynamic_findings = get_findings_from(from_app_guid=results_from_app_id, scan_type='DYNAMIC',
         from_sandbox_guid=results_from_sandbox_id)
 
-    for to_app_id in results_to_app_ids:
+    for index, to_app_id in enumerate(results_to_app_ids):
         match_for_scan_type(all_static_findings, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run, scan_type='STATIC',
-            from_sandbox_guid=results_from_sandbox_id,to_sandbox_guid=results_to_sandbox_id,propose_only=propose_only,id_list=id_list,fuzzy_match=fuzzy_match)
+            from_sandbox_guid=results_from_sandbox_id,to_sandbox_guid=results_to_sandbox_ids[index],propose_only=propose_only,id_list=id_list,fuzzy_match=fuzzy_match)
         match_for_scan_type(all_dynamic_findings, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run,
             scan_type='DYNAMIC',propose_only=propose_only,id_list=id_list)
         if copy_sca:
