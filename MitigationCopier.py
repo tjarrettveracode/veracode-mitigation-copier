@@ -406,11 +406,14 @@ def main():
     all_dynamic_findings = get_findings_from(from_app_guid=results_from_app_id, scan_type='DYNAMIC',
         from_sandbox_guid=results_from_sandbox_id)
 
-    match_for_scan_type(from_app_guid=results_from_app_id, to_app_guid=results_to_app_id, dry_run=dry_run, scan_type='STATIC',
-        from_sandbox_guid=results_from_sandbox_id,to_sandbox_guid=results_to_sandbox_id,propose_only=propose_only,id_list=id_list,fuzzy_match=fuzzy_match)
-
-    match_for_scan_type(from_app_guid=results_from_app_id, to_app_guid=results_to_app_id, dry_run=dry_run, 
-        scan_type='DYNAMIC',propose_only=propose_only,id_list=id_list)
+    for to_app_id in results_to_app_ids:
+        match_for_scan_type(all_static_findings, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run, scan_type='STATIC',
+            from_sandbox_guid=results_from_sandbox_id,to_sandbox_guid=results_to_sandbox_id,propose_only=propose_only,id_list=id_list,fuzzy_match=fuzzy_match)
+        match_for_scan_type(all_dynamic_findings, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run,
+            scan_type='DYNAMIC',propose_only=propose_only,id_list=id_list)
+        if copy_sca:
+            match_sca(from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run,annotation_type="vulnerability",propose_only=propose_only)
+            match_sca(from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run,annotation_type="license",propose_only=propose_only)
 
 if __name__ == '__main__':
     main()
