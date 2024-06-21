@@ -5,7 +5,7 @@ import json
 import datetime
 
 import anticrlf
-from veracode_api_py.api import VeracodeAPI as vapi, Applications, Findings
+from veracode_api_py.api import VeracodeAPI as vapi, Applications, Findings, SCAApplications
 from veracode_api_py.constants import Constants
 
 log = logging.getLogger(__name__)
@@ -53,7 +53,7 @@ def get_app_guid_from_legacy_id(app_id):
 
 def get_application_name(guid):
     app = Applications().get(guid)
-    return app['profile']['name']
+    return app['profile']['name']    
 
 def get_findings_by_type(app_guid, scan_type='STATIC', sandbox_guid=None):
     findings = []
@@ -128,6 +128,36 @@ def format_application_name(guid, app_name, sandbox_guid=None):
         formatted_name = 'sandbox {} in application {} (guid: {})'.format(sandbox_guid,app_name,guid)
     return formatted_name
 
+def submit_sca_mitigation(app_guid, action, comment, component_id, annotation_type, issue_id):
+    try:
+        if annotation_type == "vulnerability":
+            SCAApplications().add_annotation(app_guid=app_guid, action=action, comment=comment, annotation_type="VULNERABILITY",
+                                             component_id=component_id,cve_name=issue_id)
+        else:
+            SCAApplications().add_annotation(app_guid=app_guid, action=action, comment=comment, annotation_type="LICENSE",
+                                             component_id=component_id,license_id=issue_id)
+        log.info(f'Updated {annotation_type} mitigation information to {action} for component {component_id} and issue_id {issue_id} in application {app_guid}')
+        return True
+    except:
+        log.error(f'Unable to submit {annotation_type} mitigation information to {action} for component {component_id} and issue_id {issue_id} in application {app_guid}')
+    return False
+
+def update_sca_mitigation_info_rest(app_guid, action, comment, annotation_type, component_id, issue_id, propose_only):
+    # validate length of comment argument, gracefully handle overage
+    if len(comment) > 2048:
+        comment = comment[0:2048]
+
+    if action == 'CONFORMS' or action == 'DEVIATES':
+        log.warning(f'propose_only set to True; Cannot copy {action} mitigation for component {component_id} and issue_id {issue_id} in {app_guid}')
+        return
+    elif action == 'APPROVE':
+        if propose_only:
+            log.warning(f'propose_only set to True; skipping applying approval for component {component_id} and issue_id {issue_id} in {app_guid}')
+            return
+    
+    return submit_sca_mitigation(app_guid, action, comment, component_id, annotation_type, issue_id)
+
+
 def update_mitigation_info_rest(to_app_guid,flaw_id,action,comment,sandbox_guid=None, propose_only=False):
     # validate length of comment argument, gracefully handle overage
     if len(comment) > 2048:
@@ -156,6 +186,51 @@ def set_in_memory_flaw_to_approved(findings_to,to_id):
         if all (k in finding for k in ("id", "finding")):
             if (finding["id"] == to_id):
                 finding['finding']['finding_status']['resolution_status'] = 'APPROVED'
+def match_sca(from_app_guid, to_app_guid, dry_run, annotation_type, propose_only):
+    results_from_app_name = get_application_name(from_app_guid)
+    formatted_from = format_application_name(from_app_guid,results_from_app_name)
+    logprint('Getting SCA findings for {}'.format(formatted_from))
+    findings_from_approved = SCAApplications().get_annotations(app_guid=from_app_guid, annotation_type=annotation_type.upper())
+    if findings_from_approved:
+        findings_from_approved = findings_from_approved['approved_annotations']
+
+    count_from = len(findings_from_approved)
+    if count_from == 0:
+        logprint('No approved findings in "from" {}. Exiting.'.format(formatted_from))
+        return 0
+    
+    logprint('Found {} approved mitigations on SCA findings in {}'.format(count_from,formatted_from))
+    
+    results_to_app_name = get_application_name(to_app_guid)
+    formatted_to = format_application_name(to_app_guid,results_to_app_name)
+
+    counter = 0
+    
+    for sca_finding in findings_from_approved:
+        component_file_name = sca_finding['component']['filename']
+        component_id = sca_finding['component']['id']
+        if annotation_type == "license":
+            issue_id = sca_finding['license']['license_id']
+        else:
+            issue_id = sca_finding['vulnerability']['cve_name']
+
+        # might need to add some logic to skip already mitigated findings
+                    
+        mitigation_list = sca_finding['history']
+        logprint (f'Applying {len(mitigation_list)} {annotation_type} annotations to {component_file_name} with issue id {issue_id} in {formatted_to}...')
+
+        for mitigation_action in reversed(mitigation_list): # SCA mitigations API puts most recent action first
+            proposal_action = mitigation_action['annotation_action']
+            proposal_comment = f'COPIED {proposal_action} MITIGATION FROM APP {from_app_guid} AT {datetime.datetime.now()}'
+            if not(dry_run):
+                if not update_sca_mitigation_info_rest(to_app_guid, proposal_action, proposal_comment, annotation_type, component_id, issue_id, propose_only):
+                    counter-=1
+                    break
+
+        counter += 1
+
+    print('[*] Updated {} flaws in {}. See log file for details.'.format(str(counter),formatted_to))
+
 def get_formatted_app_name(app_guid, sandbox_guid):
     app_name = get_application_name(app_guid)
     return format_application_name(app_guid,app_name,sandbox_guid)
@@ -276,6 +351,7 @@ def main():
     parser.add_argument('-po', '--propose_only',action='store_true', help='Only propose mitigations, do not approve them')
     parser.add_argument('-i','--id_list',nargs='*', help='Only copy mitigations for the flaws in the id_list')
     parser.add_argument('-fm','--fuzzy_match',action='store_true', help='Look within a range of line numbers for a matching flaw')
+    parser.add_argument('-cs','--copy_sca',action='store_true', help='Also copy SCA findings (not compatible with --id_list or importing to and from sandboxes)')
     args = parser.parse_args()
 
     setup_logger()
@@ -300,6 +376,7 @@ def main():
     propose_only = args.propose_only
     id_list = args.id_list
     fuzzy_match = args.fuzzy_match
+    copy_sca = args.copy_sca
 
     if prompt:
         results_from_app_id = prompt_for_app("Enter the application name to copy mitigations from: ")
@@ -334,6 +411,9 @@ def main():
             from_sandbox_guid=results_from_sandbox_id,to_sandbox_guid=results_to_sandbox_id,propose_only=propose_only,id_list=id_list,fuzzy_match=fuzzy_match)
         match_for_scan_type(all_dynamic_findings, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run,
             scan_type='DYNAMIC',propose_only=propose_only,id_list=id_list)
+        if copy_sca:
+            match_sca(from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run,annotation_type="vulnerability",propose_only=propose_only)
+            match_sca(from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run,annotation_type="license",propose_only=propose_only)
 
 if __name__ == '__main__':
     main()
