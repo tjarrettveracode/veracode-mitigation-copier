@@ -445,7 +445,7 @@ def main():
 
     for index, to_app_id in enumerate(results_to_app_ids):
         match_for_scan_type(all_static_findings, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run, scan_type='STATIC',
-            from_sandbox_guid=results_from_sandbox_id,to_sandbox_guid=results_to_sandbox_ids[index],propose_only=propose_only,id_list=id_list,fuzzy_match=fuzzy_match)
+            from_sandbox_guid=results_from_sandbox_id,to_sandbox_guid=results_to_sandbox_ids[index] if results_to_sandbox_ids else None,propose_only=propose_only,id_list=id_list,fuzzy_match=fuzzy_match)
         match_for_scan_type(all_dynamic_findings, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run,
             scan_type='DYNAMIC',propose_only=propose_only,id_list=id_list)
         if copy_sca:
