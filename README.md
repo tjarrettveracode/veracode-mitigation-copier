@@ -56,6 +56,10 @@ Arguments supported include:
 - `-l`, `--legacy_ids` (optional) - Specify to use legacy Veracode application IDs rather than application GUIDs.
 - `-po`, `--propose-only` (optional) - If specified, only propose mitigations; do not approve the copied mitigations.
 - `-i`, `--id_list` (optional) - If specified, only copy mitigations from the `fromapp` for the flaw IDs in `id_list`.
+- `-vid`, `--veracode_api_key_id` - VERACODE_API_KEY_ID to use (if combined with --to_veracode_api_key_id and --to_veracode_api_key_secret, allows for moving mitigations between different instances of the platform).
+- `-vkey`, `--veracode_api_key_secret` - VERACODE_API_KEY_SECRET to use (if combined with --to_veracode_api_key_id and --to_veracode_api_key_secret, allows for moving mitigations between different instances of the platform).
+- `-tid`, `--to_veracode_api_key_id` - VERACODE_API_KEY_ID to use for TO apps/sandboxes (allows for moving mitigations between different instances of the platform).
+- `-tkey`, `--to_veracode_api_key_secret` - VERACODE_API_KEY_SECRET to use for TO apps/sandboxes (allows for moving mitigations between different instances of the platform).
 
 ## Logging
 
@@ -93,4 +97,13 @@ You must provide the legacy Veracode application ID values for both application 
 ## Notes
 
 1. For static findings, when matching by line number, we automatically look within a range of line numbers around the original finding line number to allow for drift. This is controlled by the constant `LINE_NUMBER_SLOP` declared at the top of the file.
-2. For static findings when source file information is not available, we try to use procedure and relative location. This is less predictable so it is recommended that you perform a dry run when copying mitigations from non-debug code. Unlike when source file information is available, we do not use "sloppy matching" in this case -- we have observed that mitigations in non-debug code are most common when a binary dependency is being reused across teams and thus locations are less likely to change.
+1. For static findings when source file information is not available, we try to use procedure and relative location. This is less predictable so it is recommended that you perform a dry run when copying mitigations from non-debug code. Unlike when source file information is available, we do not use "sloppy matching" in this case -- we have observed that mitigations in non-debug code are most common when a binary dependency is being reused across teams and thus locations are less likely to change.
+1. The API credentials used are picked with the following priority:
+    - For data on the "to" side: 
+        1. `-tid`/`--to_veracode_api_key_id` and `-tkey`, `--to_veracode_api_key_secret` parameters.
+        1. `VERACODE_API_KEY_ID` and `VERACODE_API_KEY_SECRET` environment variables
+        1. Credentials file
+    - For data on the "from" side:
+        1. `-vid`/`--veracode_api_key_id` and `-vkey`, `--to_veracode_api_key_secret` parameters.
+        1. `VERACODE_API_KEY_ID` and `VERACODE_API_KEY_SECRET` environment variables
+        1. Credentials file
