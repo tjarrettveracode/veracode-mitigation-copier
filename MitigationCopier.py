@@ -3,15 +3,37 @@ import argparse
 import logging
 import json
 import datetime
+import os
 
 import anticrlf
 from veracode_api_py.api import VeracodeAPI as vapi, Applications, Findings, SCAApplications, Sandboxes
 from veracode_api_py.constants import Constants
+from veracode_api_signing.credentials import get_credentials
 
 log = logging.getLogger(__name__)
 
 ALLOWED_ACTIONS = ['COMMENT', 'FP', 'APPDESIGN', 'OSENV', 'NETENV', 'REJECTED', 'ACCEPTED', 'LIBRARY', 'ACCEPTRISK', 
                    'APPROVE', 'REJECT', 'BYENV', 'BYDESIGN', 'LEGAL', 'COMMERCIAL', 'EXPERIMENTAL', 'INTERNAL']
+
+class VeracodeApiCredentials():
+    api_key_id = None
+    api_key_secret = None
+
+    def __init__(self, api_key_id, api_key_secret):
+        self.api_key_id = api_key_id
+        self.api_key_secret = api_key_secret
+
+    def run_with_credentials(self, to_run):
+        old_id = os.environ.get('veracode_api_key_id', "")
+        old_secret = os.environ.get('veracode_api_key_secret', "")
+        os.environ['veracode_api_key_id'] = self.api_key_id
+        os.environ['veracode_api_key_secret'] = self.api_key_secret
+        try:
+            return to_run(None)
+        finally:
+            os.environ['veracode_api_key_id'] = old_id
+            os.environ['veracode_api_key_secret'] = old_secret
+
 
 def setup_logger():
     handler = logging.FileHandler('MitigationCopier.log', encoding='utf8')
@@ -189,8 +211,8 @@ def set_in_memory_flaw_to_approved(findings_to,to_id):
             if (finding["id"] == to_id):
                 finding['finding']['finding_status']['resolution_status'] = 'APPROVED'
 
-def match_sca(findings_from_approved, from_app_guid, to_app_guid, dry_run, annotation_type, propose_only):
-    results_from_app_name = get_application_name(from_app_guid)
+def match_sca(findings_from_approved, from_app_guid, to_app_guid, dry_run, annotation_type, propose_only, from_credentials, to_credentials):
+    results_from_app_name = from_credentials.run_with_credentials(lambda _: get_application_name(from_app_guid))
     formatted_from = format_application_name(from_app_guid,results_from_app_name)
     logprint('Getting SCA findings for {}'.format(formatted_from))    
 
@@ -201,7 +223,7 @@ def match_sca(findings_from_approved, from_app_guid, to_app_guid, dry_run, annot
     
     logprint('Found {} approved mitigations on SCA findings in {}'.format(count_from,formatted_from))
     
-    results_to_app_name = get_application_name(to_app_guid)
+    results_to_app_name = to_credentials.run_with_credentials(lambda _: get_application_name(to_app_guid))
     formatted_to = format_application_name(to_app_guid,results_to_app_name)
 
     counter = 0
@@ -223,7 +245,7 @@ def match_sca(findings_from_approved, from_app_guid, to_app_guid, dry_run, annot
             proposal_action = mitigation_action['annotation_action']
             proposal_comment = f'COPIED {proposal_action} MITIGATION FROM APP {from_app_guid} AT {datetime.datetime.now()}'
             if not(dry_run):
-                if not update_sca_mitigation_info_rest(to_app_guid, proposal_action, proposal_comment, annotation_type, component_id, issue_id, propose_only):
+                if not to_credentials.run_with_credentials(lambda _: update_sca_mitigation_info_rest(to_app_guid, proposal_action, proposal_comment, annotation_type, component_id, issue_id, propose_only)):
                     counter-=1
                     break
 
@@ -243,23 +265,23 @@ def get_findings_from(from_app_guid, scan_type, from_sandbox_guid=None):
     logprint('Found {} {} findings in "from" {}'.format(count_from,scan_type.lower(),formatted_app_name))
     return findings_from
 
-def match_for_scan_type(findings_from, from_app_guid, to_app_guid, dry_run, scan_type='STATIC',from_sandbox_guid=None,
+def match_for_scan_type(findings_from, from_app_guid, to_app_guid, dry_run, from_credentials, to_credentials, scan_type='STATIC',from_sandbox_guid=None,
         to_sandbox_guid=None, propose_only=False, id_list=[], fuzzy_match=False):
     if len(findings_from) == 0:
         return 0 # no source findings to copy!
 
-    from_app_name = get_application_name(from_app_guid)
+    from_app_name = from_credentials.run_with_credentials(lambda _: get_application_name(from_app_guid))
     formatted_from = format_application_name(from_app_guid,from_app_name,from_sandbox_guid)
             
     if len(filter_approved(findings_from,id_list)) == 0:
         logprint('No approved findings in "from" {}. Exiting.'.format(formatted_from))
         return 0
 
-    results_to_app_name = get_application_name(to_app_guid)
+    results_to_app_name = to_credentials.run_with_credentials(lambda _: get_application_name(to_app_guid))
     formatted_to = format_application_name(to_app_guid,results_to_app_name,to_sandbox_guid)
 
     logprint('Getting {} findings for {}'.format(scan_type.lower(),formatted_to))
-    findings_to = get_findings_by_type(to_app_guid,scan_type=scan_type, sandbox_guid=to_sandbox_guid)
+    findings_to = to_credentials.run_with_credentials(lambda _: get_findings_by_type(to_app_guid,scan_type=scan_type, sandbox_guid=to_sandbox_guid))
     count_to = len(findings_to)
     logprint('Found {} {} findings in "to" {}'.format(count_to,scan_type.lower(),formatted_to))
     if count_to == 0:
@@ -271,7 +293,7 @@ def match_for_scan_type(findings_from, from_app_guid, to_app_guid, dry_run, scan
     # We'll return how many mitigations we applied
     counter = 0
 
-    formatted_from = get_formatted_app_name(from_app_guid, from_sandbox_guid)
+    formatted_from = from_credentials.run_with_credentials(lambda _: get_formatted_app_name(from_app_guid, from_sandbox_guid))
     # look for a match for each finding in the TO list and apply mitigations of the matching flaw, if found
     for this_to_finding in findings_to:
         to_id = this_to_finding['issue_id']
@@ -297,7 +319,7 @@ def match_for_scan_type(findings_from, from_app_guid, to_app_guid, dry_run, scan
             proposal_action = mitigation_action['action']
             proposal_comment = '(COPIED FROM APP {}) {}'.format(from_app_guid, mitigation_action['comment'])
             if not(dry_run):
-                update_mitigation_info_rest(to_app_guid, to_id, proposal_action, proposal_comment, to_sandbox_guid, propose_only)
+                to_credentials.run_with_credentials(lambda _: update_mitigation_info_rest(to_app_guid, to_id, proposal_action, proposal_comment, to_sandbox_guid, propose_only))
 
         set_in_memory_flaw_to_approved(copy_array_to,to_id) # so we don't attempt to mitigate approved finding twice
         counter += 1
@@ -388,7 +410,14 @@ def main():
     parser.add_argument('-l', '--legacy_ids',action='store_true', help='Use legacy Veracode app IDs instead of GUIDs')
     parser.add_argument('-po', '--propose_only',action='store_true', help='Only propose mitigations, do not approve them')
     parser.add_argument('-i','--id_list',nargs='*', help='Only copy mitigations for the flaws in the id_list')
-    parser.add_argument('-fm','--fuzzy_match',action='store_true', help='Look within a range of line numbers for a matching flaw')    
+    parser.add_argument('-fm','--fuzzy_match',action='store_true', help='Look within a range of line numbers for a matching flaw')
+
+    parser.add_argument('-vid','--veracode_api_key_id', help='VERACODE_API_KEY_ID to use (if combined with --to_veracode_api_key_id and --to_veracode_api_key_secret, allows for moving mitigations between different instances of the platform)')
+    parser.add_argument('-vkey','--veracode_api_key_secret', help='VERACODE_API_KEY_SECRET to use (if combined with --to_veracode_api_key_id and --to_veracode_api_key_secret, allows for moving mitigations between different instances of the platform)')
+
+    parser.add_argument('-tid','--to_veracode_api_key_id', help='VERACODE_API_KEY_ID to use for TO apps/sandboxes (allows for moving mitigations between different instances of the platform)')
+    parser.add_argument('-tkey','--to_veracode_api_key_secret', help='VERACODE_API_KEY_SECRET to use for TO apps/sandboxes (allows for moving mitigations between different instances of the platform)')
+
     args = parser.parse_args()
 
     setup_logger()
@@ -417,22 +446,37 @@ def main():
     propose_only = args.propose_only
     id_list = args.id_list
     fuzzy_match = args.fuzzy_match
+    
+    from_credentials = None
+    to_credentials = None
+
+    if args.veracode_api_key_id and args.veracode_api_key_secret:
+        from_credentials = VeracodeApiCredentials(args.veracode_api_key_id, args.veracode_api_key_secret)
+    else:
+        api_key_id, api_key_secret = get_credentials()
+        from_credentials = VeracodeApiCredentials(api_key_id, api_key_secret)
+    
+    if args.to_veracode_api_key_id and args.to_veracode_api_key_secret:
+        to_credentials = VeracodeApiCredentials(args.to_veracode_api_key_id, args.to_veracode_api_key_secret)
+    elif from_credentials:
+        to_credentials = from_credentials
+
 
     if prompt:
-        results_from_app_id = prompt_for_app("Enter the application name to copy mitigations from: ")
-        results_to_app_ids = [prompt_for_app("Enter the application name to copy mitigations to: ")]
+        results_from_app_id = from_credentials.run_with_credentials(lambda _:  prompt_for_app("Enter the application name to copy mitigations from: "))
+        results_to_app_ids = to_credentials.run_with_credentials(lambda _: [prompt_for_app("Enter the application name to copy mitigations to: ")])
         # ignore Sandbox arguments in the Prompt case
         results_from_sandbox_id = None
         results_to_sandbox_ids = None
     else:
         if results_from_app_name:
-            results_from_app_id = get_application_guids_by_name(results_from_app_name)[0]
+            results_from_app_id = from_credentials.run_with_credentials(lambda _: get_application_guids_by_name(results_from_app_name)[0])
         if results_from_sandbox_name:
-            results_from_sandbox_id = get_sandbox_guids_by_name([results_from_app_id], results_from_sandbox_name)[0]
+            results_from_sandbox_id = from_credentials.run_with_credentials(lambda _: get_sandbox_guids_by_name([results_from_app_id], results_from_sandbox_name)[0])
         if results_to_app_names:
-            results_to_app_ids = get_application_guids_by_name(results_to_app_names)
+            results_to_app_ids = to_credentials.run_with_credentials(lambda _: get_application_guids_by_name(results_to_app_names))
         if results_to_sandbox_names:
-            results_to_sandbox_ids = get_sandbox_guids_by_name(results_to_app_ids, results_to_sandbox_names)
+            results_to_sandbox_ids = to_credentials.run_with_credentials(lambda _: get_sandbox_guids_by_name(results_to_app_ids, results_to_sandbox_names))
 
     is_sast = False
     is_dast = False
@@ -466,34 +510,34 @@ def main():
         return
 
     if legacy_ids:
-        results_from = get_app_guid_from_legacy_id(results_from_app_id)
-        results_to = get_app_guid_from_legacy_id(results_to_app_ids)
+        results_from = from_credentials.run_with_credentials(lambda _: get_app_guid_from_legacy_id(results_from_app_id))
+        results_to = to_credentials.run_with_credentials(lambda _: get_app_guid_from_legacy_id(results_to_app_ids))
         results_from_app_id = results_from
         results_to_app_ids = results_to
 
     # get static findings and apply mitigations
     if is_sast:
-        all_static_findings = get_findings_from(from_app_guid=results_from_app_id, scan_type='STATIC',
-            from_sandbox_guid=results_from_sandbox_id)
+        all_static_findings = from_credentials.run_with_credentials(lambda _: get_findings_from(from_app_guid=results_from_app_id, scan_type='STATIC',
+            from_sandbox_guid=results_from_sandbox_id))
     if is_dast:
-        all_dynamic_findings = get_findings_from(from_app_guid=results_from_app_id, scan_type='DYNAMIC',
-            from_sandbox_guid=results_from_sandbox_id)
+        all_dynamic_findings = from_credentials.run_with_credentials(lambda _: get_findings_from(from_app_guid=results_from_app_id, scan_type='DYNAMIC',
+            from_sandbox_guid=results_from_sandbox_id))
     if is_sca_vulnerabilities:
-        all_sca_vulnerabilities = get_sca_findings_for(from_app_guid=results_from_app_id, annotation_type="vulnerability")
+        all_sca_vulnerabilities = from_credentials.run_with_credentials(lambda _: get_sca_findings_for(from_app_guid=results_from_app_id, annotation_type="vulnerability"))
     if is_sca_licences:
-        all_sca_licenses = get_sca_findings_for(from_app_guid=results_from_app_id, annotation_type="license")
+        all_sca_licenses = from_credentials.run_with_credentials(lambda _: get_sca_findings_for(from_app_guid=results_from_app_id, annotation_type="license"))
 
     for index, to_app_id in enumerate(results_to_app_ids):
         if is_sast:
             match_for_scan_type(all_static_findings, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run, scan_type='STATIC',
-                from_sandbox_guid=results_from_sandbox_id,to_sandbox_guid=results_to_sandbox_ids[index] if results_to_sandbox_ids else None,propose_only=propose_only,id_list=id_list,fuzzy_match=fuzzy_match)
+                from_sandbox_guid=results_from_sandbox_id,to_sandbox_guid=results_to_sandbox_ids[index] if results_to_sandbox_ids else None,propose_only=propose_only,id_list=id_list,fuzzy_match=fuzzy_match, from_credentials=from_credentials, to_credentials=to_credentials)
         if is_dast:
             match_for_scan_type(all_dynamic_findings, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run,
-                scan_type='DYNAMIC',propose_only=propose_only,id_list=id_list)
+                scan_type='DYNAMIC',propose_only=propose_only,id_list=id_list, from_credentials=from_credentials, to_credentials=to_credentials)
         if is_sca_vulnerabilities:
-            match_sca(all_sca_vulnerabilities, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run,annotation_type="vulnerability",propose_only=propose_only)
+            match_sca(all_sca_vulnerabilities, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run,annotation_type="vulnerability",propose_only=propose_only, from_credentials=from_credentials, to_credentials=to_credentials)
         if is_sca_licences:
-            match_sca(all_sca_licenses, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run,annotation_type="license",propose_only=propose_only)
+            match_sca(all_sca_licenses, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run,annotation_type="license",propose_only=propose_only, from_credentials=from_credentials, to_credentials=to_credentials)
 
 if __name__ == '__main__':
     main()
