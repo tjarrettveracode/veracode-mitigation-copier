@@ -13,7 +13,7 @@ from veracode_api_signing.credentials import get_credentials
 log = logging.getLogger(__name__)
 
 ALLOWED_ACTIONS = ['COMMENT', 'FP', 'APPDESIGN', 'OSENV', 'NETENV', 'REJECTED', 'ACCEPTED', 'LIBRARY', 'ACCEPTRISK', 
-                   'APPROVE', 'REJECT', 'BYENV', 'BYDESIGN', 'LEGAL', 'COMMERCIAL', 'EXPERIMENTAL', 'INTERNAL']
+                   'APPROVE', 'REJECT', 'BYENV', 'BYDESIGN', 'LEGAL', 'COMMERCIAL', 'EXPERIMENTAL', 'INTERNAL', 'APPROVED']
 
 class VeracodeApiCredentials():
     api_key_id = None
