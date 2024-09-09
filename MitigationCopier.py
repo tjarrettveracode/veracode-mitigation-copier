@@ -13,7 +13,7 @@ from veracode_api_signing.credentials import get_credentials
 log = logging.getLogger(__name__)
 
 ALLOWED_ACTIONS = ['COMMENT', 'FP', 'APPDESIGN', 'OSENV', 'NETENV', 'REJECTED', 'ACCEPTED', 'LIBRARY', 'ACCEPTRISK', 
-                   'APPROVE', 'REJECT', 'BYENV', 'BYDESIGN', 'LEGAL', 'COMMERCIAL', 'EXPERIMENTAL', 'INTERNAL']
+                   'APPROVE', 'REJECT', 'BYENV', 'BYDESIGN', 'LEGAL', 'COMMERCIAL', 'EXPERIMENTAL', 'INTERNAL', 'APPROVED']
 
 class VeracodeApiCredentials():
     api_key_id = None
@@ -93,8 +93,11 @@ def logprint(log_msg):
     log.info(log_msg)
     print(log_msg)
 
-def filter_approved(findings,id_list):
-    if id_list is not None:
+def filter_approved(findings,id_list, skip_id_list):
+    if skip_id_list is not None:
+        log.info('Skipping the following findings provided in skip_id_list: {}'.format(id_list))
+        findings = [f for f in findings if not f['issue_id'] in skip_id_list]
+    elif id_list is not None:
         log.info('Only copying the following findings provided in id_list: {}'.format(id_list))
         findings = [f for f in findings if f['issue_id'] in id_list]
 
@@ -211,7 +214,8 @@ def set_in_memory_flaw_to_approved(findings_to,to_id):
             if (finding["id"] == to_id):
                 finding['finding']['finding_status']['resolution_status'] = 'APPROVED'
 
-def match_sca(findings_from_approved, from_app_guid, to_app_guid, dry_run, annotation_type, propose_only, from_credentials, to_credentials):
+def match_sca(findings_from_approved, from_app_guid, to_app_guid, dry_run, annotation_type, propose_only, from_credentials, to_credentials, 
+              include_original_user=False, include_profile_name=False):
     results_from_app_name = from_credentials.run_with_credentials(lambda _: get_application_name(from_app_guid))
     formatted_from = format_application_name(from_app_guid,results_from_app_name)
     logprint('Getting SCA findings for {}'.format(formatted_from))    
@@ -243,7 +247,7 @@ def match_sca(findings_from_approved, from_app_guid, to_app_guid, dry_run, annot
 
         for mitigation_action in reversed(mitigation_list): # SCA mitigations API puts most recent action first
             proposal_action = mitigation_action['annotation_action']
-            proposal_comment = f'COPIED {proposal_action} MITIGATION FROM APP {from_app_guid} AT {datetime.datetime.now()}'
+            proposal_comment = f'(COPIED FROM {formatted_from if include_profile_name else (f"APP {from_app_guid}")}{f" - originally submitted by {mitigation_action['user_name']}" if include_original_user else ""}) {mitigation_action['comment']}'
             if not(dry_run):
                 if not to_credentials.run_with_credentials(lambda _: update_sca_mitigation_info_rest(to_app_guid, proposal_action, proposal_comment, annotation_type, component_id, issue_id, propose_only)):
                     counter-=1
@@ -266,15 +270,16 @@ def get_findings_from(from_app_guid, scan_type, from_sandbox_guid=None):
     return findings_from
 
 def match_for_scan_type(findings_from, from_app_guid, to_app_guid, dry_run, from_credentials, to_credentials, scan_type='STATIC',from_sandbox_guid=None,
-        to_sandbox_guid=None, propose_only=False, id_list=[], fuzzy_match=False):
+        to_sandbox_guid=None, propose_only=False, id_list=[], skip_id_list=[], fuzzy_match=False, include_original_user=False, include_profile_name=False):
     if len(findings_from) == 0:
         return 0 # no source findings to copy!
 
     from_app_name = from_credentials.run_with_credentials(lambda _: get_application_name(from_app_guid))
     formatted_from = format_application_name(from_app_guid,from_app_name,from_sandbox_guid)
             
-    if len(filter_approved(findings_from,id_list)) == 0:
-        logprint('No approved findings in "from" {}. Exiting.'.format(formatted_from))
+    findings_from = filter_approved(findings_from,id_list,skip_id_list)
+    if len(findings_from) == 0:
+        logprint('No approved {} findings in "from" {}. Exiting.'.format(scan_type.lower(), formatted_from))
         return 0
 
     results_to_app_name = to_credentials.run_with_credentials(lambda _: get_application_name(to_app_guid))
@@ -317,7 +322,10 @@ def match_for_scan_type(findings_from, from_app_guid, to_app_guid, dry_run, from
 
         for mitigation_action in reversed(mitigation_list): #findings API puts most recent action first
             proposal_action = mitigation_action['action']
-            proposal_comment = '(COPIED FROM APP {}) {}'.format(from_app_guid, mitigation_action['comment'])
+            if include_original_user:
+                proposal_comment = '(COPIED FROM {} - originally submitted by {}) {}'.format(formatted_from if include_profile_name else (f"APP {from_app_guid}"), mitigation_action['user_name'],mitigation_action['comment'])
+            else:
+                proposal_comment = '(COPIED FROM {}) {}'.format(formatted_from if include_profile_name else (f"APP {from_app_guid}"), mitigation_action['comment'])
             if not(dry_run):
                 to_credentials.run_with_credentials(lambda _: update_mitigation_info_rest(to_app_guid, to_id, proposal_action, proposal_comment, to_sandbox_guid, propose_only))
 
@@ -410,6 +418,7 @@ def main():
     parser.add_argument('-l', '--legacy_ids',action='store_true', help='Use legacy Veracode app IDs instead of GUIDs')
     parser.add_argument('-po', '--propose_only',action='store_true', help='Only propose mitigations, do not approve them')
     parser.add_argument('-i','--id_list',nargs='*', help='Only copy mitigations for the flaws in the id_list')
+    parser.add_argument('-si','--skip_id_list',nargs='*', help='Skip mitigations for the flaws in the id_list (replaces --id_list)')
     parser.add_argument('-fm','--fuzzy_match',action='store_true', help='Look within a range of line numbers for a matching flaw')
 
     parser.add_argument('-vid','--veracode_api_key_id', help='VERACODE_API_KEY_ID to use (if combined with --to_veracode_api_key_id and --to_veracode_api_key_secret, allows for moving mitigations between different instances of the platform)')
@@ -418,11 +427,14 @@ def main():
     parser.add_argument('-tid','--to_veracode_api_key_id', help='VERACODE_API_KEY_ID to use for TO apps/sandboxes (allows for moving mitigations between different instances of the platform)')
     parser.add_argument('-tkey','--to_veracode_api_key_secret', help='VERACODE_API_KEY_SECRET to use for TO apps/sandboxes (allows for moving mitigations between different instances of the platform)')
 
+    parser.add_argument('-io','--include_original_user',action='store_true', help='Set to include original submitter/approver into the copied mitigation comments')
+    parser.add_argument('-an','--include_profile_name',action='store_true', help='Set to include original application profile name instead of GUID into the copied mitigation comments')
+
     args = parser.parse_args()
 
     setup_logger()
 
-    logprint('======== beginning MitigationCopier.py run ========')
+    logprint('======== beginning MitigationCopier.py run ========')   
 
     # CHECK FOR CREDENTIALS EXPIRATION
     creds_expire_days_warning()
@@ -444,11 +456,15 @@ def main():
     dry_run = args.dry_run
     legacy_ids = args.legacy_ids
     propose_only = args.propose_only
-    id_list = args.id_list
+    id_list = [int(id) for id in args.id_list] if args.id_list else None
+    skip_id_list = [int(id) for id in args.skip_id_list] if args.skip_id_list else None
     fuzzy_match = args.fuzzy_match
     
     from_credentials = None
     to_credentials = None
+
+    include_original_user = args.include_original_user
+    include_profile_name = args.include_profile_name
 
     if args.veracode_api_key_id and args.veracode_api_key_secret:
         from_credentials = VeracodeApiCredentials(args.veracode_api_key_id, args.veracode_api_key_secret)
@@ -530,14 +546,14 @@ def main():
     for index, to_app_id in enumerate(results_to_app_ids):
         if is_sast:
             match_for_scan_type(all_static_findings, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run, scan_type='STATIC',
-                from_sandbox_guid=results_from_sandbox_id,to_sandbox_guid=results_to_sandbox_ids[index] if results_to_sandbox_ids else None,propose_only=propose_only,id_list=id_list,fuzzy_match=fuzzy_match, from_credentials=from_credentials, to_credentials=to_credentials)
+                from_sandbox_guid=results_from_sandbox_id,to_sandbox_guid=results_to_sandbox_ids[index] if results_to_sandbox_ids else None,propose_only=propose_only,id_list=id_list,skip_id_list=skip_id_list,fuzzy_match=fuzzy_match, from_credentials=from_credentials, to_credentials=to_credentials, include_original_user=include_original_user, include_profile_name=include_profile_name)
         if is_dast:
             match_for_scan_type(all_dynamic_findings, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run,
-                scan_type='DYNAMIC',propose_only=propose_only,id_list=id_list, from_credentials=from_credentials, to_credentials=to_credentials)
+                scan_type='DYNAMIC',propose_only=propose_only,id_list=id_list,skip_id_list=skip_id_list, from_credentials=from_credentials, to_credentials=to_credentials, include_original_user=include_original_user, include_profile_name=include_profile_name)
         if is_sca_vulnerabilities:
-            match_sca(all_sca_vulnerabilities, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run,annotation_type="vulnerability",propose_only=propose_only, from_credentials=from_credentials, to_credentials=to_credentials)
+            match_sca(all_sca_vulnerabilities, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run,annotation_type="vulnerability",propose_only=propose_only, from_credentials=from_credentials, to_credentials=to_credentials, include_original_user=include_original_user, include_profile_name=include_profile_name)
         if is_sca_licences:
-            match_sca(all_sca_licenses, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run,annotation_type="license",propose_only=propose_only, from_credentials=from_credentials, to_credentials=to_credentials)
+            match_sca(all_sca_licenses, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run,annotation_type="license",propose_only=propose_only, from_credentials=from_credentials, to_credentials=to_credentials, include_original_user=include_original_user, include_profile_name=include_profile_name)
 
 if __name__ == '__main__':
     main()
