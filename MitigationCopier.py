@@ -418,7 +418,7 @@ def main():
     parser.add_argument('-l', '--legacy_ids',action='store_true', help='Use legacy Veracode app IDs instead of GUIDs')
     parser.add_argument('-po', '--propose_only',action='store_true', help='Only propose mitigations, do not approve them')
     parser.add_argument('-i','--id_list',nargs='*', help='Only copy mitigations for the flaws in the id_list')
-    parser.add_argument('-si','--skip_id_list',nargs='*', help='Skip mitigations for the flaws in the id_list (replaces --id_list)')
+    parser.add_argument('-si','--skip_id_list',nargs='*', help='Skip mitigations for the flaws in the skip_id_list (replaces --id_list)')
     parser.add_argument('-fm','--fuzzy_match',action='store_true', help='Look within a range of line numbers for a matching flaw')
 
     parser.add_argument('-vid','--veracode_api_key_id', help='VERACODE_API_KEY_ID to use (if combined with --to_veracode_api_key_id and --to_veracode_api_key_secret, allows for moving mitigations between different instances of the platform)')
@@ -428,7 +428,7 @@ def main():
     parser.add_argument('-tkey','--to_veracode_api_key_secret', help='VERACODE_API_KEY_SECRET to use for TO apps/sandboxes (allows for moving mitigations between different instances of the platform)')
 
     parser.add_argument('-io','--include_original_user',action='store_true', help='Set to include original submitter/approver into the copied mitigation comments')
-    parser.add_argument('-an','--include_profile_name',action='store_true', help='Set to include original application profile name instead of GUID into the copied mitigation comments')
+    parser.add_argument('-in','--include_profile_name',action='store_true', help='Set to include original application profile name instead of GUID into the copied mitigation comments')
 
     args = parser.parse_args()
 
