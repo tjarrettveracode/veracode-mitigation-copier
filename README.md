@@ -56,10 +56,13 @@ Arguments supported include:
 - `-l`, `--legacy_ids` (optional) - Specify to use legacy Veracode application IDs rather than application GUIDs.
 - `-po`, `--propose-only` (optional) - If specified, only propose mitigations; do not approve the copied mitigations.
 - `-i`, `--id_list` (optional) - If specified, only copy mitigations from the `fromapp` for the flaw IDs in `id_list`.
+- `-si`, `--skip_id_list` (optional) - Skip mitigations for the flaws in the `skip_id_list` (replaces `--id_list`).
 - `-vid`, `--veracode_api_key_id` - VERACODE_API_KEY_ID to use (if combined with --to_veracode_api_key_id and --to_veracode_api_key_secret, allows for moving mitigations between different instances of the platform).
 - `-vkey`, `--veracode_api_key_secret` - VERACODE_API_KEY_SECRET to use (if combined with --to_veracode_api_key_id and --to_veracode_api_key_secret, allows for moving mitigations between different instances of the platform).
 - `-tid`, `--to_veracode_api_key_id` - VERACODE_API_KEY_ID to use for TO apps/sandboxes (allows for moving mitigations between different instances of the platform).
 - `-tkey`, `--to_veracode_api_key_secret` - VERACODE_API_KEY_SECRET to use for TO apps/sandboxes (allows for moving mitigations between different instances of the platform).
+- `-io`, `--include_original_user` - Set to include original submitter/approver into the copied mitigation comments.
+- `-in`, `--include_profile_name` - Set to include original application profile name instead of GUID into the copied mitigation comments.
 
 ## Logging
 
@@ -81,6 +84,10 @@ The script creates a `MitigationCopier.log` file. All actions are logged.
 ### Copy mitigations for a subset of findings
 
     python MitigationCopier.py --fromapp abcdefgh-1234-abcd-1234-123456789012 --toapp 12345678-abcd-1234-abcd-abcdefghijkl --id_list 1 2 3
+
+### Copy mitigations ignoring a set of findings
+
+    python MitigationCopier.py --fromapp abcdefgh-1234-abcd-1234-123456789012 --toapp 12345678-abcd-1234-abcd-abcdefghijkl --skip_id_list 1 2 3
 
 You must provide the application GUID values for both application profiles. You can look these up by calling the [Veracode Applications API](https://help.veracode.com/r/c_apps_intro) (or use the `--prompt` argument and copy the GUIDs from the console output).
 
