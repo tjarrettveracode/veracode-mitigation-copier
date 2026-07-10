@@ -10,6 +10,10 @@ from veracode_api_py.api import VeracodeAPI as vapi, Applications, Findings, SCA
 from veracode_api_py.constants import Constants
 from veracode_api_signing.credentials import get_credentials
 
+LOCAL_PATH = "mitigation_copier_logs/"
+today_date=datetime.datetime.now().strftime('%Y-%m-%d')
+today = datetime.datetime.now()
+
 log = logging.getLogger(__name__)
 
 ALLOWED_ACTIONS = ['COMMENT', 'FP', 'APPDESIGN', 'OSENV', 'NETENV', 'REJECTED', 'ACCEPTED', 'LIBRARY', 'ACCEPTRISK', 
@@ -36,7 +40,9 @@ class VeracodeApiCredentials():
 
 
 def setup_logger():
-    handler = logging.FileHandler('MitigationCopier.log', encoding='utf8')
+    LOCAL_LOCATION = f"{LOCAL_PATH}MitigationCopier.py_script{today}.log"
+    print("Setting log file to {}".format(LOCAL_LOCATION))
+    handler = logging.FileHandler(LOCAL_LOCATION, encoding='utf8')
     handler.setFormatter(anticrlf.LogFormatter('%(asctime)s - %(levelname)s - %(funcName)s - %(message)s'))
     log = logging.getLogger(__name__)
     log.addHandler(handler)
@@ -78,7 +84,7 @@ def get_app_guid_from_legacy_id(app_id):
 
 def get_application_name(guid):
     app = Applications().get(guid)
-    return app['profile']['name']    
+    return app['profile']['name']
 
 def get_findings_by_type(app_guid, scan_type='STATIC', sandbox_guid=None):
     findings = []
@@ -95,13 +101,23 @@ def logprint(log_msg):
 
 def filter_approved(findings,id_list, skip_id_list):
     if skip_id_list is not None:
-        log.info('Skipping the following findings provided in skip_id_list: {}'.format(id_list))
+        logprint('Skipping the following findings provided in skip_id_list: {}'.format(id_list))
         findings = [f for f in findings if not f['issue_id'] in skip_id_list]
     elif id_list is not None:
-        log.info('Only copying the following findings provided in id_list: {}'.format(id_list))
+        logprint('Only copying the following findings provided in id_list: {}'.format(id_list))
         findings = [f for f in findings if f['issue_id'] in id_list]
 
     return [f for f in findings if (f['finding_status']['resolution_status'] == 'APPROVED')]
+
+def filter_proposed(findings,id_list, skip_id_list):
+    if skip_id_list is not None:
+        logprint('Skipping the following findings provided in skip_id_list: {}'.format(id_list))
+        findings = [f for f in findings if not f['issue_id'] in skip_id_list]
+    elif id_list is not None:
+        logprint('Only copying the following findings provided in id_list: {}'.format(id_list))
+        findings = [f for f in findings if f['issue_id'] in id_list]
+
+    return [f for f in findings if (f['finding_status']['resolution_status'] == 'PROPOSED')]
 
 def format_file_path(file_path):
 
@@ -164,7 +180,7 @@ def submit_sca_mitigation(app_guid, action, comment, component_id, annotation_ty
         else:
             SCAApplications().add_annotation(app_guid=app_guid, action=action, comment=comment, annotation_type="LICENSE",
                                              component_id=component_id,license_id=issue_id)
-        log.info(f'Updated {annotation_type} mitigation information to {action} for component {component_id} and issue_id {issue_id} in application {app_guid}')
+        logprint(f'Updated {annotation_type} mitigation information to {action} for component {component_id} and issue_id {issue_id} in application {app_guid}')
         return True
     except:
         log.error(f'Unable to submit {annotation_type} mitigation information to {action} for component {component_id} and issue_id {issue_id} in application {app_guid}')
@@ -195,7 +211,7 @@ def update_mitigation_info_rest(to_app_guid,flaw_id,action,comment,sandbox_guid=
         return
     elif action == 'APPROVED':
         if propose_only:
-            log.info('propose_only set to True; skipping applying approval for flaw_id {}'.format(flaw_id))
+            logprint('propose_only set to True; skipping applying approval for flaw_id {}'.format(flaw_id))
             return
         action = Constants.ANNOT_TYPE[action]
     flaw_id_list = [flaw_id]
@@ -203,7 +219,7 @@ def update_mitigation_info_rest(to_app_guid,flaw_id,action,comment,sandbox_guid=
         Findings().add_annotation(to_app_guid,flaw_id_list,comment,action)
     else:
         Findings().add_annotation(to_app_guid,flaw_id_list,comment,action,sandbox=sandbox_guid)
-    log.info(
+    logprint(
         'Updated mitigation information to {} for Flaw ID {} in {}'.format(action, str(flaw_id_list), to_app_guid))
 
 def set_in_memory_flaw_to_approved(findings_to,to_id):
@@ -255,7 +271,7 @@ def match_sca(findings_from_approved, from_app_guid, to_app_guid, dry_run, annot
 
         counter += 1
 
-    print('[*] Updated {} flaws in {}. See log file for details.'.format(str(counter),formatted_to))
+    logprint('[*] Updated {} flaws in {}. See log file for details.'.format(str(counter),formatted_to))
 
 def get_formatted_app_name(app_guid, sandbox_guid):
     app_name = get_application_name(app_guid)
@@ -270,17 +286,23 @@ def get_findings_from(from_app_guid, scan_type, from_sandbox_guid=None):
     return findings_from
 
 def match_for_scan_type(findings_from, from_app_guid, to_app_guid, dry_run, from_credentials, to_credentials, scan_type='STATIC',from_sandbox_guid=None,
-        to_sandbox_guid=None, propose_only=False, id_list=[], skip_id_list=[], fuzzy_match=False, include_original_user=False, include_profile_name=False):
+        to_sandbox_guid=None, propose_only=False, id_list=[], skip_id_list=[], fuzzy_match=False, include_original_user=False, include_profile_name=False, include_proposed=False):
     if len(findings_from) == 0:
         return 0 # no source findings to copy!
 
     from_app_name = from_credentials.run_with_credentials(lambda _: get_application_name(from_app_guid))
     formatted_from = format_application_name(from_app_guid,from_app_name,from_sandbox_guid)
-            
-    findings_from = filter_approved(findings_from,id_list,skip_id_list)
-    if len(findings_from) == 0:
+
+    findings_from_approved = filter_approved(findings_from,id_list,skip_id_list)
+    findings_from_proposed = []
+    if include_proposed:
+        findings_from_proposed = filter_proposed(findings_from,id_list,skip_id_list)
+
+    if len(findings_from_approved) == 0:
         logprint('No approved {} findings in "from" {}. Exiting.'.format(scan_type.lower(), formatted_from))
-        return 0
+        if len(findings_from_proposed) == 0:
+            logprint('No proposed {} findings in "from" {}. Exiting.'.format(scan_type.lower(), formatted_from))
+            return 0
 
     results_to_app_name = to_credentials.run_with_credentials(lambda _: get_application_name(to_app_guid))
     formatted_to = format_application_name(to_app_guid,results_to_app_name,to_sandbox_guid)
@@ -306,33 +328,44 @@ def match_for_scan_type(findings_from, from_app_guid, to_app_guid, dry_run, from
         if this_to_finding['finding_status']['resolution_status'] == 'APPROVED':
             logprint ('Flaw ID {} in {} already has an accepted mitigation; skipped.'.format(to_id,formatted_to))
             continue
+        elif include_proposed and this_to_finding['finding_status']['resolution_status'] == 'PROPOSED':
+            logprint('Flaw ID {} in {} already has a proposed mitigation; skipped.'.format(to_id, formatted_to))
+            continue
 
-        match = Findings().match(this_to_finding,findings_from,approved_matches_only=True,allow_fuzzy_match=fuzzy_match)
+        # If include_proposed is True, set approved_matches_only to False, to copy both proposed and approved mitigations
+        match = Findings().match(this_to_finding,findings_from,approved_matches_only=(not include_proposed),allow_fuzzy_match=fuzzy_match)
 
         if match == None:
-            log.info('No approved match found for finding {} in {}'.format(to_id,formatted_from))
+            logprint('No approved match found for finding {} in {}'.format(to_id,formatted_from))
             continue
 
         from_id = match.get('id')
 
-        log.info('Source flaw {} in {} has a possible target match in flaw {} in {}.'.format(from_id,formatted_from,to_id,formatted_to))
+        logprint('Source flaw {} in {} has a possible target match in flaw {} in {}.'.format(from_id,formatted_from,to_id,formatted_to))
 
-        mitigation_list = match['finding']['annotations']
-        logprint ('Applying {} annotations for flaw ID {} in {}...'.format(len(mitigation_list),to_id,formatted_to))
+        # Since we are pulling all findings, filter and ignore any findings that have 0 annotations
+        mitigation_list = ''
+        if match['finding'].get('annotations') != None:
+            mitigation_list = match['finding']['annotations']
+            logprint ('Applying {} annotations for flaw ID {} in {}...'.format(len(mitigation_list),to_id,formatted_to))
 
         for mitigation_action in reversed(mitigation_list): #findings API puts most recent action first
             proposal_action = mitigation_action['action']
             if include_original_user:
                 proposal_comment = '(COPIED FROM {} - originally submitted by {}) {}'.format(formatted_from if include_profile_name else (f"APP {from_app_guid}"), mitigation_action['user_name'],mitigation_action['comment'])
+                # Log this action for traceability
+                logprint('(COPIED FROM {} - originally submitted by {}) {}'.format(formatted_from if include_profile_name else (f"APP {from_app_guid}"), mitigation_action['user_name'],mitigation_action['comment']))
             else:
                 proposal_comment = '(COPIED FROM {}) {}'.format(formatted_from if include_profile_name else (f"APP {from_app_guid}"), mitigation_action['comment'])
+                # Log this action for traceability
+                logprint('(COPIED FROM {}) {}'.format(formatted_from if include_profile_name else (f"APP {from_app_guid}"), mitigation_action['comment']))
             if not(dry_run):
                 to_credentials.run_with_credentials(lambda _: update_mitigation_info_rest(to_app_guid, to_id, proposal_action, proposal_comment, to_sandbox_guid, propose_only))
 
         set_in_memory_flaw_to_approved(copy_array_to,to_id) # so we don't attempt to mitigate approved finding twice
         counter += 1
-
-    print('[*] Updated {} flaws in {}. See log file for details.'.format(str(counter),formatted_to))
+    #TODO Add a counter for # of flaws matched vs # of flaws actually updated with mitigations copied
+    logprint('[*] Matched {} flaws in {}. See log file for details.'.format(str(counter),formatted_to))
 
 def get_exact_sandbox_name_match(sandbox_name, sandbox_candidates):
     for sandbox_candidate in sandbox_candidates:
@@ -430,11 +463,13 @@ def main():
     parser.add_argument('-io','--include_original_user',action='store_true', help='Set to include original submitter/approver into the copied mitigation comments')
     parser.add_argument('-in','--include_profile_name',action='store_true', help='Set to include original application profile name instead of GUID into the copied mitigation comments')
 
+    parser.add_argument('-ip','--include_proposed',action='store_true', help='Include proposed mitigations in the list of copied mitigation comments')
+
     args = parser.parse_args()
 
     setup_logger()
 
-    logprint('======== beginning MitigationCopier.py run ========')   
+    logprint('======== beginning MitigationCopier.py run ========')
 
     # CHECK FOR CREDENTIALS EXPIRATION
     creds_expire_days_warning()
@@ -465,6 +500,8 @@ def main():
 
     include_original_user = args.include_original_user
     include_profile_name = args.include_profile_name
+
+    include_proposed = args.include_proposed
 
     if args.veracode_api_key_id and args.veracode_api_key_secret:
         from_credentials = VeracodeApiCredentials(args.veracode_api_key_id, args.veracode_api_key_secret)
@@ -546,14 +583,17 @@ def main():
     for index, to_app_id in enumerate(results_to_app_ids):
         if is_sast:
             match_for_scan_type(all_static_findings, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run, scan_type='STATIC',
-                from_sandbox_guid=results_from_sandbox_id,to_sandbox_guid=results_to_sandbox_ids[index] if results_to_sandbox_ids else None,propose_only=propose_only,id_list=id_list,skip_id_list=skip_id_list,fuzzy_match=fuzzy_match, from_credentials=from_credentials, to_credentials=to_credentials, include_original_user=include_original_user, include_profile_name=include_profile_name)
+                from_sandbox_guid=results_from_sandbox_id,to_sandbox_guid=results_to_sandbox_ids[index] if results_to_sandbox_ids else None,propose_only=propose_only,id_list=id_list,skip_id_list=skip_id_list,fuzzy_match=fuzzy_match, from_credentials=from_credentials, to_credentials=to_credentials, include_original_user=include_original_user, include_profile_name=include_profile_name, include_proposed=include_proposed)
         if is_dast:
             match_for_scan_type(all_dynamic_findings, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run,
-                scan_type='DYNAMIC',propose_only=propose_only,id_list=id_list,skip_id_list=skip_id_list, from_credentials=from_credentials, to_credentials=to_credentials, include_original_user=include_original_user, include_profile_name=include_profile_name)
+                scan_type='DYNAMIC',propose_only=propose_only,id_list=id_list,skip_id_list=skip_id_list, from_credentials=from_credentials, to_credentials=to_credentials, include_original_user=include_original_user, include_profile_name=include_profile_name, include_proposed=include_proposed)
         if is_sca_vulnerabilities:
             match_sca(all_sca_vulnerabilities, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run,annotation_type="vulnerability",propose_only=propose_only, from_credentials=from_credentials, to_credentials=to_credentials, include_original_user=include_original_user, include_profile_name=include_profile_name)
         if is_sca_licences:
             match_sca(all_sca_licenses, from_app_guid=results_from_app_id, to_app_guid=to_app_id, dry_run=dry_run,annotation_type="license",propose_only=propose_only, from_credentials=from_credentials, to_credentials=to_credentials, include_original_user=include_original_user, include_profile_name=include_profile_name)
+
+    logprint('======== ending MitigationCopier.py run ========')
+
 
 if __name__ == '__main__':
     main()

@@ -63,6 +63,7 @@ Arguments supported include:
 - `-tkey`, `--to_veracode_api_key_secret` - VERACODE_API_KEY_SECRET to use for TO apps/sandboxes (allows for moving mitigations between different instances of the platform).
 - `-io`, `--include_original_user` - Set to include original submitter/approver into the copied mitigation comments.
 - `-in`, `--include_profile_name` - Set to include original application profile name instead of GUID into the copied mitigation comments.
+- `-ip`, `--include_proposed` - Set to include proposed mitigations in the list of mitigations to be copied.
 
 ## Logging
 
