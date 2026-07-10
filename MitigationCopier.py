@@ -10,6 +10,10 @@ from veracode_api_py.api import VeracodeAPI as vapi, Applications, Findings, SCA
 from veracode_api_py.constants import Constants
 from veracode_api_signing.credentials import get_credentials
 
+LOCAL_PATH = "mitigation_copier_logs/"
+today_date=datetime.datetime.now().strftime('%Y-%m-%d')
+today = datetime.datetime.now()
+
 log = logging.getLogger(__name__)
 
 ALLOWED_ACTIONS = ['COMMENT', 'FP', 'APPDESIGN', 'OSENV', 'NETENV', 'REJECTED', 'ACCEPTED', 'LIBRARY', 'ACCEPTRISK', 
@@ -36,7 +40,9 @@ class VeracodeApiCredentials():
 
 
 def setup_logger():
-    handler = logging.FileHandler('MitigationCopier.log', encoding='utf8')
+    LOCAL_LOCATION = f"{LOCAL_PATH}MitigationCopier.py_script{today}.log"
+    print("Setting log file to {}".format(LOCAL_LOCATION))
+    handler = logging.FileHandler(LOCAL_LOCATION, encoding='utf8')
     handler.setFormatter(anticrlf.LogFormatter('%(asctime)s - %(levelname)s - %(funcName)s - %(message)s'))
     log = logging.getLogger(__name__)
     log.addHandler(handler)
